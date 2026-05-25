@@ -1,0 +1,53 @@
+{% extends "base.html" %} 
+{% block title %}Nuevo Cliente{% endblock %}
+{% block content %}
+<h1>agregar un nuevo cliente</h1>
+    <div>
+        <form action="{{ url_for('clients.save_client') }}" method="post">
+            <div class="mb-3">
+                <label for="code" class="form-label">Cedula</label>
+                <input type="text" id="code" name="code" placeholder="Ingrese Cedula" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">Nombre:</label>
+                <input type="text" id="description" name="description" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="address" class="form-label">Direccion:</label >
+                <input type="text" id="address" name="address" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="phone" class="form-label">Telefono:</label >
+                <input type="text" id="phone" name="phone" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+            <label for="area_sales" class="form-label">Zona de Ventas</label>
+            <select name="area_sales" id="area_sales" class="form-select">
+                {% for a in area_sales %}
+                <option value="{{ a.code }}">{{ a.description }}</option>
+                {% endfor %}
+            </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="email" class="form-label">Correo:</label>
+                <input type="text" id="email" name="email" value="@" class="form-control">
+            </div>
+
+            <div class="mb-3">
+                <label for="credit_days" class="form-label">Dias de Prorroga</label>
+                <input type="number" id="credit_days" name="credit_days" value="5" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-success">Guardar</button>
+        </form>
+    </div>
+
+
+
+    
+
+
+{% endblock %}
