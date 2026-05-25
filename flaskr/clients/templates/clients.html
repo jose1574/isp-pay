@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Clientes{% endblock %}
+
+{% block header %}
+  <h1>Vista de clientes</h1>
+{% endblock %}
+
+{% block content %}
+  <p>Bienvenido a la página de clientes.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Email</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for client in clients %}
+      <tr>
+        <td>{{ client.code }}</td>
+        <td>{{ client.description }}</td>
+        <td>{{ client.phone }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+
+{% endblock %}
