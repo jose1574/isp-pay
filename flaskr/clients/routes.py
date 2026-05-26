@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for
+from flask import render_template, request, redirect, url_for, flash
 from . import clients_bp  
 from .services.querys import get_clients, get_area_sales, create_client
 
@@ -27,14 +27,18 @@ def save_client():
     area_sales = request.form.get('area_sales')
     credit_days = request.form.get('credit_days')
 
-    create_client(
-        code, 
-        description,
-        address,
-        email,
-        phone,
-        area_sales,
-        credit_days
-    )
+    try:
+        create_client(
+            code, 
+            description,
+            address,
+            email,
+            phone,
+            area_sales,
+            credit_days
+        )
+    except Exception as e:
+        flash(f'Error al guardar el cliente: {str(e)}', 'danger')
 
+    flash("Se guardaron correctamente los datos", 'success')
     return redirect(url_for('clients.add_client'))

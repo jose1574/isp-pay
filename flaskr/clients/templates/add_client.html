@@ -1,80 +1,77 @@
 {% extends "base.html" %} 
 {% block title %}Nuevo Cliente{% endblock %}
 {% block content %}
-<h1>agregar un nuevo cliente</h1>
-    <div>
-        <form action="{{ url_for('clients.save_client') }}" method="post">
-            <div>
-                <h3>Datos del cliente</h3>
-                <div class="mb-3">
-                    <label for="code" class="form-label">Cedula</label>
-                    <input type="text" id="code" name="code" placeholder="Ingrese Cedula" class="form-control" required>
+<div class="px-2">
+    <p class="h1 pb-4" style="text-align: center;">Clientes</p>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="container mt-3">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
                 </div>
-                <div class="mb-3">
-                    <label for="description" class="form-label">Nombre:</label>
-                    <input type="text" id="description" name="description" class="form-control" required>
+            {% endif %}
+        {% endwith %}
+
+        <div>
+            <p class="h3 mt-2  " >Datos del Cliente</p>
+            <form action="{{ url_for('clients.save_client') }}" method="post">
+                <div class="row">
+                    <div class="col">
+
+                            <label for="code" class="form-label">Cédula</label>
+                            <input type="text" id="code" name="code" placeholder="Ingrese Cedula" class="form-control" required>
+
+                    </div>
+                    <div class="col">
+                        <label for="description" class="form-label">Nombre</label>
+                        <input type="text" id="description" name="description" class="form-control" required>
+      
+                    </div>
                 </div>
+                <div class="row">
+                    <div class="col">                    
+                        <label for="address" class="form-label">Dirección</label >
+                        <input type="text" id="address" name="address" class="form-control" required>
+                    </div>
+                    <div class="col">   
+                        <label for="phone" class="form-label">Telefono</label >
+                        <input type="text" id="phone" name="phone" class="form-control" required>
+                    </div>
+                </div>  
+                <div class="row">
+                    <div class="col">
+                        <label for="area_sales" class="form-label">Zona de Ventas</label>
+                        <select name="area_sales" id="area_sales" class="form-select" aria-label="Default select example">
+                            {% for a in area_sales %}
+                            <option value="{{ a.code }}">{{ a.description }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col">                    
+                        <label for="email" class="form-label">Correo</label>
+                        <input type="text" id="email" name="email" placeholder="@" class="form-control">
+                    </div>
 
-                <div class="mb-3">
-                    <label for="address" class="form-label">Direccion:</label >
-                    <input type="text" id="address" name="address" class="form-control" required>
                 </div>
-
-                <div class="mb-3">
-                    <label for="phone" class="form-label">Telefono:</label >
-                    <input type="text" id="phone" name="phone" class="form-control" required>
+                <div class="row">
+                    <div class="col">
+                        <label for="credit_days" class="form-label" >Dias de prorroga</label>
+                        <input type="number" class="form-control" name="credit_days" id="credit_days" value="5">
+                    </div>
+                    <div class="col"></div>
                 </div>
-
-                <div class="mb-3">
-                <label for="area_sales" class="form-label">Zona de Ventas</label>
-                <select name="area_sales" id="area_sales" class="form-select">
-                    {% for a in area_sales %}
-                    <option value="{{ a.code }}">{{ a.description }}</option>
-                    {% endfor %}
-                </select>
-                </div>
-
-                <div class="mb-3">
-                    <label for="email" class="form-label">Correo:</label>
-                    <input type="text" id="email" name="email" value="@" class="form-control">
-                </div>           
-            
-            </div>
-                <hr>
-
-            
-            <div>
-                <h3>informacion de la instalacion</h3>
-                <div class="mb-3">
-                    <label for="installation_date" class="form-label">Fecha de Instalacion</label>
-                    <input type="date" class="form-control" name="installation_date" id="installation_date">
-                </div>
-
-                <div class="mb-3">
-                    <label for="credit_days" class="form-label">Dias de Prorroga</label>
-                    <input type="number" id="credit_days" name="credit_days" value="5" class="form-control" required>
-                </div>
-
-                <div class="mb-3">
-                    <label for="mac_onu" class="form-label">Ingrese la direccion MAC del dispositivo:</label>
-                    <input type="text" class="form-control" name="mac_onu" id="mac_onu" >
-                </div>
-
-            </div>
-
-
-            
-
-            
-
-            
-
-            <div>
-                <label for="subscription_day">Dia de suscrip</label>
-            </div>
-            <button type="submit" class="btn btn-success">Guardar</button>
-        </form>
-    </div>
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-success">Guardar</button>
+                    <button class="btn btn-primary m-1">Buscar</button>
+                    <button class="btn btn-danger">Eliminar</button>
+                </div>            
+            </form>
+        </div>
+</div>
 
 
 

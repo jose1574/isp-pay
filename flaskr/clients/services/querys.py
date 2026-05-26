@@ -21,6 +21,7 @@ def create_client(
         area_sales,
         credit_days
 ):
+    
     query = """ 
         SELECT set_clients(
             :code,               -- p_code (Código único del cliente)
