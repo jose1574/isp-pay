@@ -1,0 +1,195 @@
+<div id="plan-container" class="container">
+    <p class="h3 mt-2">Gestion de Planes</p>
+
+    <div>
+        <label for="code" class="form-label">Codigo del plan</label>
+        <div class="input-group mb-3">
+            <input
+                type="text"
+                id="code"
+                name="code"
+                class="form-control"
+                placeholder="Ingrese codigo del plan"
+                aria-label="Ingrese codigo del plan"
+                aria-describedby="button-addon2"
+                value="{{ code if code else '' }}"
+                hx-get="{{ url_for('subscriptions.search_plan') }}"
+                hx-trigger="keyup[key=='Enter']"
+                hx-target="#plan-container"
+                hx-swap="outerHTML"
+                required
+            >
+            <button
+                class="btn btn-primary"
+                type="button"
+                id="button-addon2"
+                hx-get="{{ url_for('subscriptions.modal_plans') }}"
+                hx-trigger="click"
+                hx-target="#modal_plans_container"
+            >Buscar</button>
+        </div>
+    </div>
+
+    <form action="{{ url_for('subscriptions.save_plan') }}" method="post" id="plan-form">
+        <input type="text" name="code" id="code-hidden" value="{{ code if code else '' }}" hidden>
+
+        <div class="row">
+            <div class="col">
+                <label for="description" class="form-label">Descripcion</label>
+                <input
+                    type="text"
+                    id="description"
+                    name="description"
+                    class="form-control"
+                    value="{{ plan.description if plan else '' }}"
+                    {% if not form_enabled %}disabled{% endif %}
+                    required
+                >
+            </div>
+            <div class="col">
+                <label for="coin" class="form-label">Moneda</label>
+                <select id="coin" name="coin" class="form-select" {% if not form_enabled %}disabled{% endif %} required>
+                    <option value="">Seleccione moneda</option>
+                    {% for coin_item in coins %}
+                    <option
+                        value="{{ coin_item.code }}"
+                        {% if plan and plan.coin == coin_item.code %}selected{% endif %}
+                    >
+                        {{ coin_item.code }}{% if coin_item.description is defined and coin_item.description %} - {{ coin_item.description }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col">
+                <label for="price" class="form-label">Precio</label>
+                <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    id="price"
+                    name="price"
+                    class="form-control"
+                    value="{{ plan.price if plan else '' }}"
+                    {% if not form_enabled %}disabled{% endif %}
+                    required
+                >
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col">
+                <div class="form-floating">
+                    <textarea
+                        class="form-control"
+                        name="comment"
+                        placeholder="Escribe tu comentario aqui"
+                        id="comment"
+                        style="height: 100px"
+                    >{{ plan.comment if plan and plan.comment else '' }}</textarea>
+                    <label for="comment">Comentarios</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" id="save-plan-btn" class="btn btn-success" disabled {% if not form_enabled %}disabled{% endif %}>Guardar</button>
+            <button
+                type="button"
+                class="btn btn-primary m-1"
+                hx-get="{{ url_for('subscriptions.modal_plans') }}"
+                hx-trigger="click"
+                hx-target="#modal_plans_container"
+            >Buscar</button>
+            <button
+                type="submit"
+                id="delete-plan-btn"
+                class="btn btn-danger"
+                formaction="{{ url_for('subscriptions.remove_plan') }}"
+                formmethod="post"
+                formnovalidate
+                {% if not plan %}disabled{% endif %}
+            >Eliminar</button>
+        </div>
+    </form>
+</div>
+
+<div id="modal_plans_container"></div>
+
+<script>
+    (function () {
+        const form = document.getElementById('plan-form');
+        const saveButton = document.getElementById('save-plan-btn');
+        const codeInput = document.getElementById('code');
+        const codeHiddenInput = document.getElementById('code-hidden');
+        const descriptionInput = document.getElementById('description');
+
+        if (!form || !saveButton) {
+            return;
+        }
+
+        const isRequiredFieldComplete = (field) => {
+            if (field.disabled) {
+                return true;
+            }
+
+            return field.value.trim() !== '' && field.checkValidity();
+        };
+
+        const isFormComplete = () => {
+            const requiredFields = form.querySelectorAll('[required]');
+            return Array.from(requiredFields).every(isRequiredFieldComplete);
+        };
+
+        const updateSaveButtonState = () => {
+            const canSave = {{ 'true' if form_enabled else 'false' }} && isFormComplete() && codeHiddenInput.value.trim() !== '';
+            saveButton.disabled = !canSave;
+        };
+
+        const syncCodeValue = () => {
+            if (codeInput && codeHiddenInput) {
+                codeHiddenInput.value = codeInput.value.trim();
+            }
+        };
+
+        syncCodeValue();
+
+        if (codeInput) {
+            codeInput.addEventListener('input', function () {
+                syncCodeValue();
+                updateSaveButtonState();
+            });
+            codeInput.addEventListener('change', function () {
+                syncCodeValue();
+                updateSaveButtonState();
+            });
+        }
+
+        form.addEventListener('input', updateSaveButtonState);
+        form.addEventListener('change', updateSaveButtonState);
+
+        form.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' && !isFormComplete()) {
+                event.preventDefault();
+            }
+        });
+
+        form.addEventListener('submit', function (event) {
+            syncCodeValue();
+
+            if (event.submitter && event.submitter.id === 'delete-plan-btn') {
+                return;
+            }
+
+            if (!isFormComplete() || codeHiddenInput.value.trim() === '') {
+                event.preventDefault();
+                updateSaveButtonState();
+            }
+        });
+
+        if (codeInput && descriptionInput && codeInput.value.trim() !== '' && !descriptionInput.disabled) {
+            descriptionInput.focus();
+        }
+
+        updateSaveButtonState();
+    })();
+</script>

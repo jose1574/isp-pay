@@ -11,6 +11,7 @@ from .services.querys import (
     create_installation,
     create_installation_media,
     get_latest_installation_by_client,
+    get_installation,
     get_installation_media,
     update_installation,
     upsert_installation_media,
@@ -18,8 +19,17 @@ from .services.querys import (
 )
 
 
-def _build_installation_context(client_code):
-    installation = get_latest_installation_by_client(client_code) if client_code else None
+def _build_installation_context(client_code, installation_id=None):
+    installation = None
+
+    if installation_id:
+        installation = get_installation(installation_id)
+        if installation and client_code and installation.client_code != client_code:
+            installation = None
+
+    if installation is None and client_code:
+        installation = get_latest_installation_by_client(client_code)
+
     media_urls = {}
 
     if installation:
@@ -80,8 +90,16 @@ def installations():
 @installations_bp.route('/installation', methods=['GET'])
 def installation():
     code = request.args.get('code')
+    raw_installation_id = (request.args.get('installation_id') or '').strip()
+    installation_id = None
+    if raw_installation_id:
+        try:
+            installation_id = int(raw_installation_id)
+        except ValueError:
+            installation_id = None
+
     client = get_client(code) if code else None
-    context = _build_installation_context(client.code if client else code)
+    context = _build_installation_context(client.code if client else code, installation_id=installation_id)
 
     return render_template(
         'installation.html',

@@ -1,0 +1,95 @@
+<div class="modal fade show" id="modalPlanes" tabindex="-1" aria-labelledby="modalPlanesLabel" style="display: block;" aria-modal="true" role="dialog">
+	<div class="modal-dialog modal-lg modal-dialog-scrollable">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title" id="modalPlanesLabel">Buscar Plan</h5>
+				<button type="button" class="btn-close" onclick="cerrarModalPlanes()" aria-label="Close"></button>
+			</div>
+
+			<div class="modal-body">
+				<form
+					class="d-flex align-items-center gap-2 mb-3"
+					hx-get="{{ url_for('subscriptions.modal_plans') }}"
+					hx-target="#modal_plans_container"
+					hx-swap="innerHTML"
+				>
+					<div class="input-group input-group-sm" style="max-width: 360px;">
+						<span class="input-group-text" id="modal-search-label">Buscar</span>
+						<input
+							type="text"
+							name="q"
+							class="form-control"
+							placeholder="Codigo, descripcion, moneda o precio"
+							value="{{ q if q else '' }}"
+							aria-label="Buscar plan en modal"
+							aria-describedby="modal-search-label"
+							hx-trigger="keyup changed delay:300ms"
+						>
+						<button class="btn btn-outline-primary" type="submit">Filtrar</button>
+					</div>
+					{% if q %}
+					<a
+						class="btn btn-sm btn-outline-secondary"
+						hx-get="{{ url_for('subscriptions.modal_plans') }}"
+						hx-target="#modal_plans_container"
+						hx-swap="innerHTML"
+						href="{{ url_for('subscriptions.modal_plans') }}"
+					>Limpiar</a>
+					{% endif %}
+				</form>
+
+				<div class="table-responsive">
+					<table class="table table-hover align-middle">
+						<thead class="table-light">
+							<tr>
+								<th>Codigo</th>
+								<th>Descripcion</th>
+								<th>Moneda</th>
+								<th>Precio</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for plan in plans %}
+							<tr
+								onclick="window.location='{{ url_for('subscriptions.plans', code=plan.code) }}';"
+								style="cursor: pointer;"
+								class="align-middle"
+							>
+								<td>{{ plan.code }}</td>
+								<td>{{ plan.description }}</td>
+								<td>{{ plan.coin if plan.coin else '-' }}</td>
+								<td>{{ plan.price if plan.price is not none else '-' }}</td>
+							</tr>
+							{% else %}
+							<tr>
+								<td colspan="4" class="text-center text-muted">No hay planes registrados.</td>
+							</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+
+				<div class="d-flex justify-content-between align-items-center mt-3">
+					<small class="text-body-secondary">
+						Mostrando {{ plans|length }} de {{ total_plans }} planes
+					</small>
+				</div>
+			</div>
+
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary" onclick="cerrarModalPlanes()">Cerrar</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="modal-backdrop fade show" id="modalBackdropPlanes"></div>
+
+<script>
+	function cerrarModalPlanes() {
+		const modal = document.getElementById('modalPlanes');
+		const backdrop = document.getElementById('modalBackdropPlanes');
+		if (modal) modal.remove();
+		if (backdrop) backdrop.remove();
+	}
+</script>

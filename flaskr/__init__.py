@@ -32,9 +32,11 @@ def create_app(test_config=None):
 
     from . import clients
     from . import installations
+    from . import subscriptions
 
     app.register_blueprint(clients.clients_bp, url_prefix='/clients')
     app.register_blueprint(installations.installations_bp, url_prefix='/installations')
+    app.register_blueprint(subscriptions.subscriptions_bp, url_prefix='/subscriptions')
 
 
     return app

@@ -5,20 +5,43 @@ from flask import current_app
 from flaskr import db
 
 
+def _has_contract_number_column() -> bool:
+    exists = db.session.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'genius'
+                  AND table_name = 'installations'
+                  AND column_name = 'contract_number'
+            )
+            """
+        )
+    ).scalar_one()
+    return bool(exists)
+
+
 
 
 def get_installations(page: int | None = None, per_page: int | None = None, search: str | None = None):
     search = (search or '').strip()
     where_clause = ''
     params = {}
+    has_contract_number = _has_contract_number_column()
 
     if search:
-        where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
+        if has_contract_number:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR CAST(contract_number AS TEXT) ILIKE :search"
+        else:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
         params['search'] = f"%{search}%"
+
+    order_clause = " ORDER BY client_code, contract_number DESC, id DESC" if has_contract_number else " ORDER BY install_date DESC, id DESC"
 
     if page is None or per_page is None:
         installations = db.session.execute(
-            text(f"SELECT * FROM genius.installations{where_clause} ORDER BY install_date DESC, id DESC"),
+            text(f"SELECT * FROM genius.installations{where_clause}{order_clause}"),
             params,
         ).fetchall()
         return installations
@@ -27,7 +50,7 @@ def get_installations(page: int | None = None, per_page: int | None = None, sear
     params['limit'] = per_page
     params['offset'] = offset
     installations = db.session.execute(
-        text(f"SELECT * FROM genius.installations{where_clause} ORDER BY install_date DESC, id DESC LIMIT :limit OFFSET :offset"),
+        text(f"SELECT * FROM genius.installations{where_clause}{order_clause} LIMIT :limit OFFSET :offset"),
         params,
     ).fetchall()
     return installations
@@ -37,9 +60,13 @@ def get_installations_count(search: str | None = None):
     search = (search or '').strip()
     where_clause = ''
     params = {}
+    has_contract_number = _has_contract_number_column()
 
     if search:
-        where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
+        if has_contract_number:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR CAST(contract_number AS TEXT) ILIKE :search"
+        else:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
         params['search'] = f"%{search}%"
 
     total = db.session.execute(
@@ -51,12 +78,15 @@ def get_installations_count(search: str | None = None):
 
 
 def get_latest_installation_by_client(client_code):
+    has_contract_number = _has_contract_number_column()
+    order_clause = "contract_number DESC, id DESC" if has_contract_number else "install_date DESC, id DESC"
+
     query = text(
-        """
+        f"""
         SELECT *
         FROM genius.installations
         WHERE client_code = :client_code
-        ORDER BY install_date DESC, id DESC
+        ORDER BY {order_clause}
         LIMIT 1
         """
     )
@@ -92,24 +122,52 @@ def create_installation(
     mac_address,
     comment,
 ):
-    query = text(
-        """
-        INSERT INTO genius.installations (
-            client_code,
-            install_date,
-            location,
-            mac_address,
-            comment
-        ) VALUES (
-            :client_code,
-            :install_date,
-            :location,
-            :mac_address,
-            :comment
+    has_contract_number = _has_contract_number_column()
+
+    if has_contract_number:
+        query = text(
+            """
+            INSERT INTO genius.installations (
+                client_code,
+                contract_number,
+                install_date,
+                location,
+                mac_address,
+                comment
+            ) VALUES (
+                :client_code,
+                (
+                    SELECT COALESCE(MAX(i.contract_number), 0) + 1
+                    FROM genius.installations i
+                    WHERE i.client_code = :client_code
+                ),
+                :install_date,
+                :location,
+                :mac_address,
+                :comment
+            )
+            RETURNING id
+            """
         )
-        RETURNING id
-        """
-    )
+    else:
+        query = text(
+            """
+            INSERT INTO genius.installations (
+                client_code,
+                install_date,
+                location,
+                mac_address,
+                comment
+            ) VALUES (
+                :client_code,
+                :install_date,
+                :location,
+                :mac_address,
+                :comment
+            )
+            RETURNING id
+            """
+        )
 
     try:
         result = db.session.execute(
@@ -127,7 +185,7 @@ def create_installation(
     except SQLAlchemyError as error:
         db.session.rollback()
         if getattr(getattr(error, 'orig', None), 'pgcode', None) == '23505':
-            # Unique violation: misma MAC para el mismo cliente.
+            # Unique violation: MAC duplicada global o contrato repetido por cliente.
             return "duplicate_client_mac"
         current_app.logger.exception("Error de base de datos al crear instalacion: %s", error)
         return None
@@ -234,6 +292,13 @@ def update_installation(
         db.session.rollback()
         current_app.logger.exception("Error inesperado al actualizar instalacion: %s", error)
         return False
+
+
+def get_installation(installation_id: int):
+    return db.session.execute(
+        text("SELECT * FROM genius.installations WHERE id = :installation_id"),
+        {'installation_id': installation_id},
+    ).first()
 
 
 def upsert_installation_media(

@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+
+{% block title %}Suscripciones{% endblock %}
+
+{% block header %}
+  <p class="h1 pb-4" style="text-align: center;">Suscripciones de Servicios</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="container mt-3">
+  <div id="options" class="d-flex align-items-center gap-3 flex-wrap justify-content-between">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <a href="{{ url_for('subscriptions.subscription') }}" class="btn btn-primary">Registrar suscripcion</a>
+    </div>
+
+    <form method="get" action="{{ url_for('subscriptions.subscriptions') }}" class="d-flex align-items-center gap-2">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <div class="input-group input-group-sm" style="max-width: 420px;">
+        <span class="input-group-text" id="inputGroup-sizing-sm">Buscar</span>
+        <input
+          type="text"
+          name="q"
+          class="form-control"
+          placeholder="Cedula, instalacion, plan o estado"
+          value="{{ q if q else '' }}"
+          aria-label="Buscar suscripcion"
+          aria-describedby="inputGroup-sizing-sm"
+        >
+        <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+      </div>
+      {% if q %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('subscriptions.subscriptions', per_page=per_page) }}">Limpiar</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="table-responsive mt-3">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>Cedula Cliente</th>
+          <th>Instalacion</th>
+          <th>Plan</th>
+          <th>Estado</th>
+          <th>Dia cobro</th>
+          <th>Credito</th>
+          <th>Precio aplicado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for subscription in subscriptions %}
+        <tr
+          onclick="window.location='{{ url_for('subscriptions.subscription', code=subscription.client_code, installation=subscription.installation) }}';"
+          style="cursor: pointer;"
+          class="align-middle"
+        >
+          <td>{{ subscription.client_code if subscription.client_code is defined else '-' }}</td>
+          <td>
+            {% if subscription.installation is not none %}
+              Contrato-{{ subscription.installation_contract_number if subscription.installation_contract_number is not none else '?' }} | #{{ subscription.installation }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            {{ subscription.plan_code if subscription.plan_code is defined else '-' }}
+            {% if subscription.plan_description is defined and subscription.plan_description %}
+              - {{ subscription.plan_description }}
+            {% endif %}
+          </td>
+          <td>{{ subscription.status if subscription.status is defined else '-' }}</td>
+          <td>{{ subscription.cutoff_day if subscription.cutoff_day is not none else '-' }}</td>
+          <td>{{ subscription.credit_day if subscription.credit_day is not none else '-' }}</td>
+          <td>{{ subscription.price_applied if subscription.price_applied is not none else '-' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted">No hay suscripciones registradas.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <small class="text-body-secondary">
+      Mostrando {{ subscriptions|length }} de {{ total_subscriptions }} suscripciones
+    </small>
+    <small class="text-body-secondary">
+      Pagina {{ page }} de {{ total_pages }}
+    </small>
+  </div>
+
+  <nav aria-label="Paginacion de suscripciones" class="mt-2">
+    {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+    {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+    <ul class="pagination mb-0">
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('subscriptions.subscriptions', page=1, per_page=per_page, q=q) }}" aria-label="Primera">Primera</a>
+      </li>
+
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('subscriptions.subscriptions', page=page-1, per_page=per_page, q=q) }}" aria-label="Anterior">Anterior</a>
+      </li>
+
+      {% if start_page > 1 %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+
+      {% for p in range(start_page, end_page + 1) %}
+      <li class="page-item {% if p == page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('subscriptions.subscriptions', page=p, per_page=per_page, q=q) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+
+      {% if end_page < total_pages %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+
+      <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('subscriptions.subscriptions', page=page+1, per_page=per_page, q=q) }}" aria-label="Siguiente">Siguiente</a>
+      </li>
+
+      <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('subscriptions.subscriptions', page=total_pages, per_page=per_page, q=q) }}" aria-label="Ultima">Ultima</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+
+{% endblock %}

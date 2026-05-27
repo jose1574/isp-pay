@@ -1,0 +1,236 @@
+<div id="subscription-form-container" class="container">
+	<p class="h3 mt-2">Gestion de Suscripciones</p>
+
+	<div>
+		<label for="code" class="form-label">Cedula del cliente</label>
+		<div class="input-group mb-3">
+			<input
+				type="text"
+				id="code"
+				name="code"
+				class="form-control"
+				placeholder="Ingrese cedula"
+				aria-label="Ingrese cedula"
+				aria-describedby="button-addon-client"
+				value="{{ code if code else '' }}"
+				hx-get="{{ url_for('subscriptions.search_subscription') }}"
+				hx-trigger="keyup[key=='Enter']"
+				hx-target="#subscription-form-container"
+				hx-swap="outerHTML"
+				required
+			>
+			<button
+				class="btn btn-primary"
+				type="button"
+				id="button-addon-client"
+				hx-get="{{ url_for('subscriptions.modal_clients') }}"
+				hx-trigger="click"
+				hx-target="#modal_clients_container"
+			>Buscar</button>
+		</div>
+	</div>
+
+	<form action="{{ url_for('subscriptions.save_subscription') }}" method="post" id="subscription-form">
+		<input type="text" name="code" id="code-hidden" value="{{ code if code else '' }}" hidden>
+		<input type="text" name="correlative" id="correlative-hidden" value="{{ subscription.correlative if subscription else '' }}" hidden>
+
+		<div class="row">
+			<div class="col">
+				<label for="installation-select" class="form-label">Instalacion</label>
+				<select
+					id="installation-select"
+					name="installation"
+					class="form-select"
+					hx-get="{{ url_for('subscriptions.search_subscription') }}"
+					hx-trigger="change"
+					hx-target="#subscription-form-container"
+					hx-swap="outerHTML"
+					hx-include="#code,#installation-select"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+					<option value="">Seleccione una instalacion</option>
+					{% for installation in installations %}
+					<option value="{{ installation.id }}" {% if selected_installation == installation.id %}selected{% endif %}>
+						Contrato-{{ installation.contract_number if installation.contract_number is not none else '?' }} | #{{ installation.id }} - {{ installation.location }} ({{ installation.install_date }})
+					</option>
+					{% endfor %}
+				</select>
+			</div>
+			<div class="col">
+				<label for="plan_code" class="form-label">Plan de internet</label>
+				<select id="plan_code" name="plan_code" class="form-select" {% if not form_enabled %}disabled{% endif %} required>
+					<option value="">Seleccione un plan</option>
+					{% for plan in plans %}
+					<option value="{{ plan.code }}" data-price="{{ plan.price if plan.price is not none else '' }}" {% if subscription and subscription.plan_code == plan.code %}selected{% endif %}>
+						{{ plan.code }} - {{ plan.description }}
+					</option>
+					{% endfor %}
+				</select>
+			</div>
+		</div>
+
+		<div class="row mt-3">
+			<div class="col">
+				<label for="status" class="form-label">Estado</label>
+				<select id="status" name="status" class="form-select" {% if not form_enabled %}disabled{% endif %} required>
+					<option value="">Seleccione estado</option>
+					{% for status_option in status_options %}
+					<option value="{{ status_option }}" {% if subscription and subscription.status == status_option %}selected{% endif %}>
+						{{ status_option }}
+					</option>
+					{% endfor %}
+				</select>
+			</div>
+			<div class="col">
+				<label for="cutoff_day" class="form-label">Dia de cobro</label>
+				<input
+					type="date"
+					id="cutoff_day"
+					name="cutoff_day"
+					class="form-control"
+					value="{{ subscription.cutoff_day if subscription and subscription.cutoff_day is not none else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+			<div class="col">
+				<label for="credit_day" class="form-label">Dias de credito</label>
+				<input
+					type="number"
+					min="1"
+					max="31"
+					id="credit_day"
+					name="credit_day"
+					class="form-control"
+					value="{{ subscription.credit_day if subscription and subscription.credit_day is not none else default_credit_day }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+			<div class="col">
+				<label for="price_applied" class="form-label">Precio aplicado</label>
+				<input
+					type="number"
+					step="0.01"
+					min="0"
+					id="price_applied"
+					name="price_applied"
+					class="form-control"
+					value="{{ subscription.price_applied if subscription and subscription.price_applied is not none else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+		</div>
+
+		<div class="mt-4">
+			<button type="submit" id="save-subscription-btn" class="btn btn-success" disabled {% if not form_enabled %}disabled{% endif %}>Guardar</button>
+			<button
+				type="button"
+				class="btn btn-primary m-1"
+				hx-get="{{ url_for('subscriptions.modal_clients') }}"
+				hx-trigger="click"
+				hx-target="#modal_clients_container"
+			>Buscar cliente</button>
+		</div>
+	</form>
+</div>
+
+<div id="modal_clients_container"></div>
+
+<script>
+	(function () {
+		const form = document.getElementById('subscription-form');
+		const saveButton = document.getElementById('save-subscription-btn');
+		const codeInput = document.getElementById('code');
+		const codeHiddenInput = document.getElementById('code-hidden');
+		const planSelect = document.getElementById('plan_code');
+		const priceInput = document.getElementById('price_applied');
+
+		if (!form || !saveButton) {
+			return;
+		}
+
+		const isRequiredFieldComplete = (field) => {
+			if (field.disabled) {
+				return true;
+			}
+
+			return field.value.trim() !== '' && field.checkValidity();
+		};
+
+		const isFormComplete = () => {
+			const requiredFields = form.querySelectorAll('[required]');
+			return Array.from(requiredFields).every(isRequiredFieldComplete);
+		};
+
+		const syncCodeValue = () => {
+			if (codeInput && codeHiddenInput) {
+				codeHiddenInput.value = codeInput.value.trim();
+			}
+		};
+
+		const updateSaveButtonState = () => {
+			const canSave = {{ 'true' if form_enabled else 'false' }} && isFormComplete() && codeHiddenInput.value.trim() !== '';
+			saveButton.disabled = !canSave;
+		};
+
+		const updatePriceFromPlan = () => {
+			if (!planSelect || !priceInput || planSelect.disabled || priceInput.disabled) {
+				return;
+			}
+
+			const selectedOption = planSelect.options[planSelect.selectedIndex];
+			if (!selectedOption) {
+				return;
+			}
+
+			const selectedPrice = selectedOption.dataset.price || '';
+			priceInput.value = selectedPrice;
+		};
+
+		syncCodeValue();
+
+		if (codeInput) {
+			codeInput.addEventListener('input', function () {
+				syncCodeValue();
+				updateSaveButtonState();
+			});
+			codeInput.addEventListener('change', function () {
+				syncCodeValue();
+				updateSaveButtonState();
+			});
+		}
+
+		if (planSelect) {
+			planSelect.addEventListener('change', function () {
+				updatePriceFromPlan();
+				updateSaveButtonState();
+			});
+		}
+
+		form.addEventListener('input', updateSaveButtonState);
+		form.addEventListener('change', updateSaveButtonState);
+
+		form.addEventListener('keydown', function (event) {
+			if (event.key === 'Enter' && !isFormComplete()) {
+				event.preventDefault();
+			}
+		});
+
+		form.addEventListener('submit', function (event) {
+			syncCodeValue();
+			if (!isFormComplete() || codeHiddenInput.value.trim() === '') {
+				event.preventDefault();
+				updateSaveButtonState();
+			}
+		});
+
+		{% if not subscription %}
+		updatePriceFromPlan();
+		{% endif %}
+
+		updateSaveButtonState();
+	})();
+</script>
