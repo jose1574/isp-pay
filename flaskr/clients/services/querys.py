@@ -8,6 +8,10 @@ def get_clients():
     clients = db.session.execute(text("SELECT * FROM clients")).fetchall()
     return clients
 
+def get_client(code: str ):
+    client = db.session.execute(text('SELECT * FROM clients WHERE code= :code'), {"code": code}).first()
+    return client
+
 def get_area_sales():
     area_sales =  db.session.execute(text("SELECT * FROM area_sales")).fetchall()
     return area_sales

@@ -1,0 +1,62 @@
+<div class="modal fade show" id="modalClientes" tabindex="-1" aria-labelledby="modalClientesLabel" style="display: block;" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalClientesLabel">Buscar Cliente</h5>
+                <button type="button" class="btn-close" onclick="cerrarModal()" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Cédula</th>
+                                <th>Nombre</th>
+                                <th>Teléfono</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for client in clients %}
+                                <tr
+                                onclick="window.location='{{ url_for('clients.add_client', code=client.code) }}';"
+                                style="cursor: pointer;" 
+                                class="align-middle"
+                                >
+                                        <td>
+                                        {{ client.code }}
+                                        </td>
+                                        <td>{{ client.description }}</td>
+                                        <td>{{ client.phone }}</td>
+                                </tr>
+                                 
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">No hay clientes registrados.</td>
+                            </tr>
+
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cerrar</button>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<div class="modal-backdrop fade show" id="modalBackdrop"></div>
+
+<script>
+    function cerrarModal() {
+        const modal = document.getElementById('modalClientes');
+        const backdrop = document.getElementById('modalBackdrop');
+        if(modal) modal.remove();
+        if(backdrop) backdrop.remove();
+    }
+</script>

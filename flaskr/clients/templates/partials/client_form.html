@@ -1,0 +1,84 @@
+<div id="client-form-container">
+    <p class="h3 mt-2">Datos del Cliente</p>
+    <form action="{{ url_for('clients.save_client') }}" method="post">
+        {% set form_enabled = searched_code|default('') %}
+        {% if alert_message %}
+        <div class="alert alert-{{ alert_type|default('info') }}" role="alert">
+            {{ alert_message }}
+        </div>
+        {% endif %}
+        <div class="row">
+            <div class="col">
+                <label for="code" class="form-label">Cédula</label>
+                <input
+                    type="text"
+                    id="code"
+                    name="code"
+                    placeholder="Ingrese Cédula"
+                    class="form-control"
+                    value="{{ client.code if client else searched_code|default('') }}"
+                    hx-get="{{ url_for('clients.add_client') }}"
+                    hx-trigger="change, keyup[key=='Enter']"
+                    hx-target="#client-form-container"
+                    hx-swap="outerHTML"
+                    required
+                >
+            </div>
+            <div class="col">
+                <label for="description" class="form-label">Nombre</label>
+                <input type="text" id="description" name="description" class="form-control" 
+                value="{{ client.description if client else '' }}" {% if not form_enabled %}disabled{% endif %} required>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col">
+                <label for="address" class="form-label">Dirección</label>
+                <input type="text" id="address" name="address" class="form-control" value="{{ client.address if client else '' }}" 
+                {% if not form_enabled %}disabled{% endif %} required>
+            </div>
+            <div class="col">
+                <label for="phone" class="form-label">Telefono</label>
+                <input type="text" id="phone" name="phone" class="form-control" 
+                value="{{ client.phone if client else '' }}" {% if not form_enabled %}disabled{% endif %} required>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col">
+                <label for="area_sales" class="form-label">Zona de Ventas</label>
+                <select name="area_sales" id="area_sales" class="form-select" {% if not form_enabled %}disabled{% endif %}>
+                    <option value="" {% if not client or not client.area_sales %}selected{% endif %} disabled>Seleccione una zona</option>
+                    {% for a in area_sales %}
+                    <option value="{{ a.code }}" {% if client and client.area_sales == a.code %}selected{% endif %}>{{ a.description }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col">
+                <label for="email" class="form-label">Correo</label>
+                <input type="text" id="email" name="email" placeholder="@" class="form-control" 
+                value="{{ client.email if client else '' }}" required {% if not form_enabled %}disabled{% endif %}>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col">
+                <label for="credit_days" class="form-label">Dias de prorroga</label>
+                <input type="number" class="form-control" name="credit_days" id="credit_days" value="{{ client.credit_days if client else 5 }}" required {% if not form_enabled %}disabled{% endif %}>
+            </div>
+            <div class="col"></div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-success" {% if not form_enabled %}disabled{% endif %}>Guardar</button>
+            <button
+                type="button"
+                class="btn btn-primary m-1"
+                hx-get="{{ url_for('clients.modal_clients') }}"
+                hx-trigger="click"
+                hx-target="#modal_clients_container"
+            >Buscar</button>
+            <button class="btn btn-danger">Eliminar</button>
+        </div>
+    </form>
+</div>
