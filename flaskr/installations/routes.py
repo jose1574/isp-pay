@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from flaskr.clients.services.querys import get_clients, get_clients_count, get_client
 from .services.querys import (
     get_installations,
+    get_installations_by_client,
     get_installations_count,
     create_installation,
     create_installation_media,
@@ -19,7 +20,8 @@ from .services.querys import (
 )
 
 
-def _build_installation_context(client_code, installation_id=None):
+def _build_installation_context(client_code, installation_id=None, new_mode=False):
+    installations = get_installations_by_client(client_code) if client_code else []
     installation = None
 
     if installation_id:
@@ -27,8 +29,9 @@ def _build_installation_context(client_code, installation_id=None):
         if installation and client_code and installation.client_code != client_code:
             installation = None
 
-    if installation is None and client_code:
-        installation = get_latest_installation_by_client(client_code)
+    if not new_mode and installation is None and installation_id is None:
+        # Flujo nuevo: tras buscar cliente mostramos primero la lista, no el formulario.
+        installation = None
 
     media_urls = {}
 
@@ -47,8 +50,11 @@ def _build_installation_context(client_code, installation_id=None):
             media_urls[row.media_type] = f"data:{mime_type};base64,{b64_data}"
 
     return {
+        'installations': installations,
         'installation': installation,
         'media_urls': media_urls,
+        'show_form': bool(new_mode or installation),
+        'new_mode': bool(new_mode),
     }
 
 
@@ -91,6 +97,7 @@ def installations():
 def installation():
     code = request.args.get('code')
     raw_installation_id = (request.args.get('installation_id') or '').strip()
+    new_mode = (request.args.get('mode') or '').strip().lower() == 'new'
     installation_id = None
     if raw_installation_id:
         try:
@@ -99,14 +106,17 @@ def installation():
             installation_id = None
 
     client = get_client(code) if code else None
-    context = _build_installation_context(client.code if client else code, installation_id=installation_id)
+    context = _build_installation_context(client.code if client else code, installation_id=installation_id, new_mode=new_mode)
 
     return render_template(
         'installation.html',
         code=client.code if client else code,
         form_enabled=True,
+        installations=context['installations'],
         installation=context['installation'],
         media_urls=context['media_urls'],
+        show_form=context['show_form'],
+        new_mode=context['new_mode'],
     )
 
 
@@ -123,8 +133,11 @@ def search_client():
             'partials/installation_form.html',
             code='',
             form_enabled=True,
+            installations=[],
             installation=None,
             media_urls={},
+            show_form=False,
+            new_mode=False,
         )
 
     client = get_client(code)
@@ -139,16 +152,22 @@ def search_client():
                 'partials/installation_form.html',
                 code=client.code,
                 form_enabled=True,
+                installations=context['installations'],
                 installation=context['installation'],
                 media_urls=context['media_urls'],
+                show_form=context['show_form'],
+                new_mode=context['new_mode'],
             )
 
         return render_template(
             'installation.html',
             code=client.code,
             form_enabled=True,
+            installations=context['installations'],
             installation=context['installation'],
             media_urls=context['media_urls'],
+            show_form=context['show_form'],
+            new_mode=context['new_mode'],
         )
 
     flash("Cliente no encontrado, ingrese datos para crear un nuevo cliente", "warning")
@@ -163,8 +182,49 @@ def search_client():
         'installation.html',
         code=code,
         form_enabled=True,
+        installations=[],
         installation=None,
         media_urls={},
+        show_form=False,
+        new_mode=False,
+    )
+
+
+@installations_bp.route('/get_installation_form', methods=['GET'])
+def get_installation_form():
+    code = (request.args.get('code') or '').strip()
+    raw_installation_id = (request.args.get('installation_id') or '').strip()
+    new_mode = (request.args.get('mode') or '').strip().lower() == 'new'
+
+    if not code:
+        return render_template(
+            'partials/installation_form.html',
+            code='',
+            form_enabled=True,
+            installations=[],
+            installation=None,
+            media_urls={},
+            show_form=False,
+            new_mode=False,
+        )
+
+    installation_id = None
+    if raw_installation_id:
+        try:
+            installation_id = int(raw_installation_id)
+        except ValueError:
+            installation_id = None
+
+    context = _build_installation_context(code, installation_id=installation_id, new_mode=new_mode)
+    return render_template(
+        'partials/installation_form.html',
+        code=code,
+        form_enabled=True,
+        installations=context['installations'],
+        installation=context['installation'],
+        media_urls=context['media_urls'],
+        show_form=context['show_form'],
+        new_mode=context['new_mode'],
     )
 
 
@@ -266,7 +326,7 @@ def save_installation():
             )
 
     flash('Se actualizo correctamente la instalacion' if was_update else 'Se guardo correctamente la instalacion', 'success')
-    return redirect(url_for('installations.installation', code=client_code))
+    return redirect(url_for('installations.installation', code=client_code, installation_id=installation_id))
 
 
 @installations_bp.route('/delete', methods=['POST'])

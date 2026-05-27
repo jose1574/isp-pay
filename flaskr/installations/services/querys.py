@@ -76,6 +76,31 @@ def get_installations_count(search: str | None = None):
     return total
 
 
+def get_installations_by_client(client_code: str):
+    has_contract_number = _has_contract_number_column()
+
+    if has_contract_number:
+        query = text(
+            """
+            SELECT *
+            FROM genius.installations
+            WHERE client_code = :client_code
+            ORDER BY contract_number ASC, id ASC
+            """
+        )
+    else:
+        query = text(
+            """
+            SELECT *, NULL::INTEGER AS contract_number
+            FROM genius.installations
+            WHERE client_code = :client_code
+            ORDER BY id ASC
+            """
+        )
+
+    return db.session.execute(query, {'client_code': client_code}).fetchall()
+
+
 
 def get_latest_installation_by_client(client_code):
     has_contract_number = _has_contract_number_column()
