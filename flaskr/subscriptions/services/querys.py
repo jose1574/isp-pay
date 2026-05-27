@@ -298,6 +298,51 @@ def get_subscriptions_count(search: str | None = None):
     ).scalar_one()
 
 
+def get_subscriptions_by_client(client_code: str):
+    has_no_installation = _has_no_installation_column()
+    has_contract_number = _has_contract_number_column()
+
+    if has_no_installation:
+        installation_alias_expr = "i.no_installation"
+    elif has_contract_number:
+        installation_alias_expr = "('contrato-' || i.contract_number::text)"
+    else:
+        installation_alias_expr = "NULL::VARCHAR"
+
+    return db.session.execute(
+        text(
+            f"""
+            SELECT
+                s.*,
+                p.description AS plan_description,
+                {installation_alias_expr} AS installation_no_installation,
+                i.location AS installation_location,
+                i.install_date AS installation_date
+            FROM genius.subscription s
+            LEFT JOIN genius.plans p ON p.code = s.plan_code
+            LEFT JOIN genius.installations i ON i.id = s.installation
+            WHERE s.client_code = :client_code
+            ORDER BY s.correlative DESC
+            """
+        ),
+        {'client_code': client_code},
+    ).fetchall()
+
+
+def get_subscription(correlative: int):
+    return db.session.execute(
+        text(
+            """
+            SELECT *
+            FROM genius.subscription
+            WHERE correlative = :correlative
+            LIMIT 1
+            """
+        ),
+        {'correlative': correlative},
+    ).first()
+
+
 def get_installations_by_client(client_code: str):
     has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
@@ -460,4 +505,33 @@ def update_subscription(
     except Exception as error:
         db.session.rollback()
         current_app.logger.exception('Error inesperado al actualizar suscripcion: %s', error)
+        return False
+
+
+def delete_subscription(correlative, client_code):
+    query = text(
+        """
+        DELETE FROM genius.subscription
+        WHERE correlative = :correlative
+          AND client_code = :client_code
+        """
+    )
+
+    try:
+        result = db.session.execute(
+            query,
+            {
+                'correlative': correlative,
+                'client_code': client_code,
+            },
+        )
+        db.session.commit()
+        return result.rowcount > 0
+    except SQLAlchemyError as error:
+        db.session.rollback()
+        current_app.logger.exception('Error de base de datos al eliminar suscripcion: %s', error)
+        return False
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.exception('Error inesperado al eliminar suscripcion: %s', error)
         return False

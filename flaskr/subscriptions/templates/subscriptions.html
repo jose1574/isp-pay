@@ -51,7 +51,7 @@
       <tbody>
         {% for subscription in subscriptions %}
         <tr
-          onclick="window.location='{{ url_for('subscriptions.subscription', code=subscription.client_code, installation=subscription.installation) }}';"
+          onclick="window.location='{{ url_for('subscriptions.subscription', code=subscription.client_code, correlative=subscription.correlative) }}';"
           style="cursor: pointer;"
           class="align-middle"
         >

@@ -9,12 +9,15 @@ from .services.querys import (
     get_coins,
     get_plan,
     get_plans,
+    get_subscription,
     get_subscriptions,
+    get_subscriptions_by_client,
     get_subscriptions_count,
     get_installations_by_client,
     get_subscription_by_installation,
     create_subscription,
     update_subscription,
+    delete_subscription,
     create_plan,
     update_plan,
     delete_plan,
@@ -27,6 +30,60 @@ STATUS_OPTIONS = [
     'suspendido_temporal',
     'retirado',
 ]
+
+
+def _build_subscription_context(client, correlative=None, installation_id=None, new_mode=False):
+    installations = get_installations_by_client(client.code) if client else []
+    subscriptions = get_subscriptions_by_client(client.code) if client else []
+
+    current_subscription = None
+    if correlative:
+        current_subscription = get_subscription(correlative)
+        if current_subscription and current_subscription.client_code != client.code:
+            current_subscription = None
+
+    if current_subscription is None and installation_id:
+        current_subscription = get_subscription_by_installation(installation_id)
+        if current_subscription and current_subscription.client_code != client.code:
+            current_subscription = None
+
+    selected_installation = current_subscription.installation if current_subscription else None
+    if selected_installation is None and installation_id:
+        selected_installation = installation_id
+
+    occupied_installations = {item.installation for item in subscriptions if item.installation is not None}
+    available_installations = []
+    for installation in installations:
+        if current_subscription and installation.id == current_subscription.installation:
+            available_installations.append(installation)
+            continue
+
+        if installation.id not in occupied_installations:
+            available_installations.append(installation)
+
+    if new_mode and selected_installation is None and available_installations:
+        selected_installation = available_installations[0].id
+
+    default_credit_day = (
+        current_subscription.credit_day
+        if current_subscription and current_subscription.credit_day is not None
+        else (client.credit_days if client and getattr(client, 'credit_days', None) is not None else '')
+    )
+
+    return {
+        'client': client,
+        'subscriptions': subscriptions,
+        'installations': installations,
+        'available_installations': available_installations,
+        'selected_installation': selected_installation,
+        'subscription': current_subscription,
+        'default_credit_day': default_credit_day,
+        'plans': get_plans(),
+        'status_options': STATUS_OPTIONS,
+        'show_form': bool(new_mode or current_subscription),
+        'new_mode': bool(new_mode),
+        'form_enabled': True,
+    }
 
 
 @subscriptions_bp.route('/')
@@ -67,54 +124,65 @@ def subscriptions():
 @subscriptions_bp.route('/subscription', methods=['GET'])
 def subscription():
     code = (request.args.get('code') or '').strip()
+    raw_correlative = (request.args.get('correlative') or '').strip()
     raw_installation = (request.args.get('installation') or '').strip()
+    new_mode = (request.args.get('mode') or '').strip().lower() == 'new'
 
     client = get_client(code) if code else None
-    installations = get_installations_by_client(client.code) if client else []
+    correlative = None
+    if raw_correlative:
+        try:
+            correlative = int(raw_correlative)
+        except ValueError:
+            correlative = None
 
-    selected_installation = None
+    installation_id = None
     if raw_installation:
         try:
-            selected_installation = int(raw_installation)
+            installation_id = int(raw_installation)
         except ValueError:
-            selected_installation = None
+            installation_id = None
 
-    installation_ids = [row.id for row in installations]
-    if selected_installation not in installation_ids:
-        selected_installation = installation_ids[0] if installation_ids else None
-
-    current_subscription = get_subscription_by_installation(selected_installation) if selected_installation else None
-    plans_list = get_plans()
-    default_credit_day = current_subscription.credit_day if current_subscription and current_subscription.credit_day is not None else (client.credit_days if client and getattr(client, 'credit_days', None) is not None else '')
+    context = _build_subscription_context(client, correlative=correlative, installation_id=installation_id, new_mode=new_mode) if client else {
+        'client': None,
+        'subscriptions': [],
+        'installations': [],
+        'available_installations': [],
+        'selected_installation': None,
+        'subscription': None,
+        'default_credit_day': '',
+        'plans': get_plans(),
+        'status_options': STATUS_OPTIONS,
+        'show_form': False,
+        'new_mode': False,
+        'form_enabled': True,
+    }
 
     return render_template(
         'subscription.html',
         code=client.code if client else code,
-        client=client,
-        installations=installations,
-        selected_installation=selected_installation,
-        subscription=current_subscription,
-        default_credit_day=default_credit_day,
-        plans=plans_list,
-        status_options=STATUS_OPTIONS,
-        form_enabled=True,
+        **context,
     )
 
 
 @subscriptions_bp.route('/get_subscription', methods=['GET'])
 def search_subscription():
     code = (request.args.get('code') or '').strip()
-    raw_installation = (request.args.get('installation') or '').strip()
 
     if not code:
         context = {
             'code': '',
             'client': None,
+            'subscriptions': [],
             'installations': [],
+            'available_installations': [],
             'selected_installation': None,
             'subscription': None,
+            'default_credit_day': '',
             'plans': get_plans(),
             'status_options': STATUS_OPTIONS,
+            'show_form': False,
+            'new_mode': False,
             'form_enabled': True,
         }
 
@@ -131,36 +199,74 @@ def search_subscription():
 
         return redirect(url_for('subscriptions.subscription', code=code))
 
-    installations = get_installations_by_client(client.code)
-    selected_installation = None
-    if raw_installation:
-        try:
-            selected_installation = int(raw_installation)
-        except ValueError:
-            selected_installation = None
-
-    installation_ids = [row.id for row in installations]
-    if selected_installation not in installation_ids:
-        selected_installation = installation_ids[0] if installation_ids else None
-
-    current_subscription = get_subscription_by_installation(selected_installation) if selected_installation else None
-    default_credit_day = current_subscription.credit_day if current_subscription and current_subscription.credit_day is not None else (client.credit_days if getattr(client, 'credit_days', None) is not None else '')
-    context = {
-        'code': client.code,
-        'client': client,
-        'installations': installations,
-        'selected_installation': selected_installation,
-        'subscription': current_subscription,
-        'default_credit_day': default_credit_day,
-        'plans': get_plans(),
-        'status_options': STATUS_OPTIONS,
-        'form_enabled': True,
-    }
+    context = _build_subscription_context(client)
 
     if request.headers.get('HX-Request') == 'true':
-        return render_template('partials/subscription_form.html', **context)
+        return render_template('partials/subscription_form.html', code=client.code, **context)
 
-    return render_template('subscription.html', **context)
+    return render_template('subscription.html', code=client.code, **context)
+
+
+@subscriptions_bp.route('/get_subscription_form', methods=['GET'])
+def get_subscription_form():
+    code = (request.args.get('code') or '').strip()
+    raw_correlative = (request.args.get('correlative') or '').strip()
+    raw_installation = (request.args.get('installation') or '').strip()
+    new_mode = (request.args.get('mode') or '').strip().lower() == 'new'
+
+    if not code:
+        return render_template(
+            'partials/subscription_form.html',
+            code='',
+            client=None,
+            subscriptions=[],
+            installations=[],
+            available_installations=[],
+            selected_installation=None,
+            subscription=None,
+            default_credit_day='',
+            plans=get_plans(),
+            status_options=STATUS_OPTIONS,
+            show_form=False,
+            new_mode=False,
+            form_enabled=True,
+        )
+
+    client = get_client(code)
+    if not client:
+        return render_template(
+            'partials/subscription_form.html',
+            code=code,
+            client=None,
+            subscriptions=[],
+            installations=[],
+            available_installations=[],
+            selected_installation=None,
+            subscription=None,
+            default_credit_day='',
+            plans=get_plans(),
+            status_options=STATUS_OPTIONS,
+            show_form=False,
+            new_mode=False,
+            form_enabled=True,
+        )
+
+    correlative = None
+    if raw_correlative:
+        try:
+            correlative = int(raw_correlative)
+        except ValueError:
+            correlative = None
+
+    installation_id = None
+    if raw_installation:
+        try:
+            installation_id = int(raw_installation)
+        except ValueError:
+            installation_id = None
+
+    context = _build_subscription_context(client, correlative=correlative, installation_id=installation_id, new_mode=new_mode)
+    return render_template('partials/subscription_form.html', code=client.code, **context)
 
 
 @subscriptions_bp.route('/subscription/save', methods=['POST'])
@@ -269,7 +375,7 @@ def save_subscription():
             return redirect(url_for('subscriptions.subscription', code=code, installation=installation))
 
         flash('Suscripcion actualizada correctamente.', 'success')
-        return redirect(url_for('subscriptions.subscription', code=code, installation=installation))
+        return redirect(url_for('subscriptions.subscription', code=code, correlative=correlative))
 
     if existing_for_installation:
         flash('Ya existe una suscripcion para esa instalacion.', 'warning')
@@ -298,7 +404,32 @@ def save_subscription():
         return redirect(url_for('subscriptions.subscription', code=code, installation=installation))
 
     flash('Suscripcion creada correctamente.', 'success')
-    return redirect(url_for('subscriptions.subscription', code=code, installation=installation))
+    return redirect(url_for('subscriptions.subscription', code=code, correlative=result))
+
+
+@subscriptions_bp.route('/subscription/delete', methods=['POST'])
+def remove_subscription():
+    code = (request.form.get('code') or '').strip()
+    raw_correlative = (request.form.get('correlative') or '').strip()
+
+    if not code or not raw_correlative:
+        flash('No se encontro la suscripcion a eliminar.', 'warning')
+        return redirect(url_for('subscriptions.subscription', code=code or None))
+
+    try:
+        correlative = int(raw_correlative)
+    except ValueError:
+        flash('Identificador de suscripcion invalido.', 'warning')
+        return redirect(url_for('subscriptions.subscription', code=code))
+
+    deleted = delete_subscription(correlative=correlative, client_code=code)
+
+    if not deleted:
+        flash('No fue posible eliminar la suscripcion.', 'danger')
+        return redirect(url_for('subscriptions.subscription', code=code, correlative=correlative))
+
+    flash('Se elimino correctamente la suscripcion.', 'warning')
+    return redirect(url_for('subscriptions.subscription', code=code))
 
 
 @subscriptions_bp.route('/plans')
