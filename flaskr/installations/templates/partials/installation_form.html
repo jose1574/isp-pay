@@ -96,7 +96,15 @@
                 hx-trigger="click"
                 hx-target="#modal_clients_container"
             >Buscar</button>
-            <button class="btn btn-danger" disabled>Eliminar</button>
+            <button
+                type="submit"
+                id="delete-installation-btn"
+                class="btn btn-danger"
+                formaction="{{ url_for('installations.remove_installation') }}"
+                formmethod="post"
+                formnovalidate
+                {% if not installation %}disabled{% endif %}
+            >Eliminar</button>
         </div>
     </form>
 </div>
@@ -156,6 +164,10 @@
 
         form.addEventListener('submit', function (event) {
             syncCodeValue();
+
+            if (event.submitter && event.submitter.id === 'delete-installation-btn') {
+                return;
+            }
 
             if (!isFormComplete()) {
                 event.preventDefault();

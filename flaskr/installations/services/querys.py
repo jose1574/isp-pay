@@ -5,6 +5,51 @@ from flask import current_app
 from flaskr import db
 
 
+
+
+def get_installations(page: int | None = None, per_page: int | None = None, search: str | None = None):
+    search = (search or '').strip()
+    where_clause = ''
+    params = {}
+
+    if search:
+        where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
+        params['search'] = f"%{search}%"
+
+    if page is None or per_page is None:
+        installations = db.session.execute(
+            text(f"SELECT * FROM genius.installations{where_clause} ORDER BY install_date DESC, id DESC"),
+            params,
+        ).fetchall()
+        return installations
+
+    offset = (page - 1) * per_page
+    params['limit'] = per_page
+    params['offset'] = offset
+    installations = db.session.execute(
+        text(f"SELECT * FROM genius.installations{where_clause} ORDER BY install_date DESC, id DESC LIMIT :limit OFFSET :offset"),
+        params,
+    ).fetchall()
+    return installations
+
+
+def get_installations_count(search: str | None = None):
+    search = (search or '').strip()
+    where_clause = ''
+    params = {}
+
+    if search:
+        where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
+        params['search'] = f"%{search}%"
+
+    total = db.session.execute(
+        text(f"SELECT COUNT(*) FROM genius.installations{where_clause}"),
+        params,
+    ).scalar_one()
+    return total
+
+
+
 def get_latest_installation_by_client(client_code):
     query = text(
         """
@@ -262,3 +307,32 @@ def upsert_installation_media(
         mime_type=mime_type,
         file_size_bytes=file_size_bytes,
     )
+
+
+def delete_installation(installation_id, client_code):
+    query = text(
+        """
+        DELETE FROM genius.installations
+        WHERE id = :installation_id
+          AND client_code = :client_code
+        """
+    )
+
+    try:
+        result = db.session.execute(
+            query,
+            {
+                "installation_id": installation_id,
+                "client_code": client_code,
+            },
+        )
+        db.session.commit()
+        return result.rowcount > 0
+    except SQLAlchemyError as error:
+        db.session.rollback()
+        current_app.logger.exception("Error de base de datos al eliminar instalacion: %s", error)
+        return False
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.exception("Error inesperado al eliminar instalacion: %s", error)
+        return False

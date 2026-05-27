@@ -6,12 +6,15 @@ from werkzeug.utils import secure_filename
 
 from flaskr.clients.services.querys import get_clients, get_clients_count, get_client
 from .services.querys import (
+    get_installations,
+    get_installations_count,
     create_installation,
     create_installation_media,
     get_latest_installation_by_client,
     get_installation_media,
     update_installation,
     upsert_installation_media,
+    delete_installation,
 )
 
 
@@ -41,14 +44,37 @@ def _build_installation_context(client_code):
 
 @installations_bp.route('/')
 def installations():
+    q = (request.args.get('q') or '').strip()
+
+    try:
+        page = int(request.args.get('page', 1))
+    except ValueError:
+        page = 1
+
+    try:
+        per_page = int(request.args.get('per_page', 10))
+    except ValueError:
+        per_page = 10
+
+    page = max(1, page)
+    per_page = min(max(5, per_page), 100)
+
+    total_installations = get_installations_count(search=q)
+    total_pages = max(1, (total_installations + per_page - 1) // per_page)
+
+    if page > total_pages:
+        page = total_pages
+
+    installations = get_installations(page=page, per_page=per_page, search=q)
+
     return render_template(
         'installations.html',
-        installations=[],
-        q='',
-        page=1,
-        per_page=10,
-        total_pages=1,
-        total_installations=0,
+        installations=installations,
+        q=q,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        total_installations=total_installations,
     )
 
 @installations_bp.route('/installation', methods=['GET'])
@@ -222,6 +248,34 @@ def save_installation():
             )
 
     flash('Se actualizo correctamente la instalacion' if was_update else 'Se guardo correctamente la instalacion', 'success')
+    return redirect(url_for('installations.installation', code=client_code))
+
+
+@installations_bp.route('/delete', methods=['POST'])
+def remove_installation():
+    raw_installation_id = (request.form.get('installation_id') or '').strip()
+    client_code = (request.form.get('code') or '').strip()
+
+    if not raw_installation_id or not client_code:
+        flash('No se encontro la instalacion a eliminar.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code or None))
+
+    try:
+        installation_id = int(raw_installation_id)
+    except ValueError:
+        flash('Id de instalacion invalido.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code))
+
+    deleted = delete_installation(
+        installation_id=installation_id,
+        client_code=client_code,
+    )
+
+    if not deleted:
+        flash('No fue posible eliminar la instalacion.', 'danger')
+        return redirect(url_for('installations.installation', code=client_code))
+
+    flash('Se elimino correctamente la instalacion.', 'warning')
     return redirect(url_for('installations.installation', code=client_code))
 
 

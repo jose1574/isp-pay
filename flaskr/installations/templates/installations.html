@@ -19,9 +19,9 @@
         type="text"
         name="q"
         class="form-control"
-        placeholder="Cedula, nombre o telefono"
+        placeholder="Cedula, ubicacion, MAC o comentario"
         value="{{ q if q else '' }}"
-        aria-label="Buscar cliente"
+        aria-label="Buscar instalacion"
         aria-describedby="inputGroup-sizing-sm"
       >
       <button class="btn btn-outline-primary" type="submit">Filtrar</button>
@@ -34,21 +34,27 @@
   <table class="table">
     <thead>
       <tr>
-         <th>Cédula</th>
-        <th>Nombre</th>
-        <th>Telefono</th>
+        <th>Cedula Cliente</th>
+        <th>Fecha</th>
+        <th>Ubicacion</th>
+        <th>Direccion MAC</th>
       </tr>
     </thead>
     <tbody>
       {% for installation in installations %}
       <tr      
-        onclick="window.location='{{ url_for('installations.installation', code=installation.code) }}';"
+        onclick="window.location='{{ url_for('installations.installation', code=installation.client_code) }}';"
         style="cursor: pointer;" 
         class="align-middle"
       >
-        <td>{{ installation.code }}</td>
-        <td>{{ installation.description }}</td>
-        <td>{{ installation.phone }}</td>
+        <td>{{ installation.client_code }}</td>
+        <td>{{ installation.install_date }}</td>
+        <td>{{ installation.location }}</td>
+        <td>{{ installation.mac_address }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" class="text-center text-muted">No hay instalaciones registradas.</td>
       </tr>
       {% endfor %}
     </tbody>
