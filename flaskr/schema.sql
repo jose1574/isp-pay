@@ -240,7 +240,7 @@ $$;
 CREATE TABLE IF NOT EXISTS genius.installations (
 	id BIGSERIAL PRIMARY KEY,
 	client_code VARCHAR(30) NOT NULL,
-	contract_number INTEGER,
+	no_installation VARCHAR(40),
 	install_date DATE NOT NULL,
 	location VARCHAR(255) NOT NULL,
 	mac_address VARCHAR(50) NOT NULL,
@@ -261,9 +261,23 @@ BEGIN
 		FROM information_schema.columns
 		WHERE table_schema = 'genius'
 		  AND table_name = 'installations'
+		  AND column_name = 'no_installation'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.installations ADD COLUMN no_installation VARCHAR(40)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'installations'
 		  AND column_name = 'contract_number'
 	) THEN
-		EXECUTE 'ALTER TABLE genius.installations ADD COLUMN contract_number INTEGER';
+		EXECUTE 'UPDATE genius.installations SET no_installation = ''contrato-'' || contract_number::text WHERE no_installation IS NULL AND contract_number IS NOT NULL';
 	END IF;
 END
 $$;
@@ -278,10 +292,10 @@ WITH ordered_installations AS (
 	FROM genius.installations
 )
 UPDATE genius.installations i
-SET contract_number = oi.rn
+SET no_installation = 'contrato-' || oi.rn::text
 FROM ordered_installations oi
 WHERE i.id = oi.id
-	AND i.contract_number IS NULL;
+	AND i.no_installation IS NULL;
 
 DO $$
 BEGIN
@@ -290,14 +304,29 @@ BEGIN
 		FROM information_schema.columns
 		WHERE table_schema = 'genius'
 		  AND table_name = 'installations'
-		  AND column_name = 'contract_number'
+		  AND column_name = 'no_installation'
 	)
 	AND NOT EXISTS (
 		SELECT 1
 		FROM genius.installations
-		WHERE contract_number IS NULL
+		WHERE no_installation IS NULL
 	) THEN
-		EXECUTE 'ALTER TABLE genius.installations ALTER COLUMN contract_number SET NOT NULL';
+		EXECUTE 'ALTER TABLE genius.installations ALTER COLUMN no_installation SET NOT NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'uq_installations_client_contract'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'DROP INDEX genius.uq_installations_client_contract';
 	END IF;
 END
 $$;
@@ -312,7 +341,7 @@ BEGIN
 		  AND c.relname = 'uq_installations_client_contract'
 		  AND n.nspname = 'genius'
 	) THEN
-		EXECUTE 'CREATE UNIQUE INDEX uq_installations_client_contract ON genius.installations(client_code, contract_number)';
+		EXECUTE 'CREATE UNIQUE INDEX uq_installations_client_contract ON genius.installations(client_code, no_installation)';
 	END IF;
 END
 $$;

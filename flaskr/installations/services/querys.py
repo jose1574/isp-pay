@@ -5,6 +5,23 @@ from flask import current_app
 from flaskr import db
 
 
+def _has_no_installation_column() -> bool:
+    exists = db.session.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'genius'
+                  AND table_name = 'installations'
+                  AND column_name = 'no_installation'
+            )
+            """
+        )
+    ).scalar_one()
+    return bool(exists)
+
+
 def _has_contract_number_column() -> bool:
     exists = db.session.execute(
         text(
@@ -28,20 +45,31 @@ def get_installations(page: int | None = None, per_page: int | None = None, sear
     search = (search or '').strip()
     where_clause = ''
     params = {}
+    has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
 
     if search:
-        if has_contract_number:
-            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR CAST(contract_number AS TEXT) ILIKE :search"
+        if has_no_installation:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR no_installation ILIKE :search"
+        elif has_contract_number:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR ('contrato-' || contract_number::text) ILIKE :search"
         else:
             where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
         params['search'] = f"%{search}%"
 
-    order_clause = " ORDER BY client_code, contract_number DESC, id DESC" if has_contract_number else " ORDER BY install_date DESC, id DESC"
+    if has_no_installation:
+        select_clause = "SELECT i.*, i.no_installation AS no_installation_display FROM genius.installations i"
+        order_clause = " ORDER BY i.client_code, COALESCE(NULLIF(regexp_replace(lower(i.no_installation), '[^0-9]', '', 'g'), '')::INTEGER, 0) DESC, i.id DESC"
+    elif has_contract_number:
+        select_clause = "SELECT i.*, ('contrato-' || i.contract_number::text) AS no_installation_display FROM genius.installations i"
+        order_clause = " ORDER BY i.client_code, i.contract_number DESC, i.id DESC"
+    else:
+        select_clause = "SELECT i.*, NULL::VARCHAR AS no_installation_display FROM genius.installations i"
+        order_clause = " ORDER BY i.install_date DESC, i.id DESC"
 
     if page is None or per_page is None:
         installations = db.session.execute(
-            text(f"SELECT * FROM genius.installations{where_clause}{order_clause}"),
+            text(f"{select_clause}{where_clause}{order_clause}"),
             params,
         ).fetchall()
         return installations
@@ -50,7 +78,7 @@ def get_installations(page: int | None = None, per_page: int | None = None, sear
     params['limit'] = per_page
     params['offset'] = offset
     installations = db.session.execute(
-        text(f"SELECT * FROM genius.installations{where_clause}{order_clause} LIMIT :limit OFFSET :offset"),
+        text(f"{select_clause}{where_clause}{order_clause} LIMIT :limit OFFSET :offset"),
         params,
     ).fetchall()
     return installations
@@ -60,11 +88,14 @@ def get_installations_count(search: str | None = None):
     search = (search or '').strip()
     where_clause = ''
     params = {}
+    has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
 
     if search:
-        if has_contract_number:
-            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR CAST(contract_number AS TEXT) ILIKE :search"
+        if has_no_installation:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR no_installation ILIKE :search"
+        elif has_contract_number:
+            where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search OR ('contrato-' || contract_number::text) ILIKE :search"
         else:
             where_clause = " WHERE client_code ILIKE :search OR location ILIKE :search OR mac_address ILIKE :search OR comment ILIKE :search"
         params['search'] = f"%{search}%"
@@ -77,24 +108,34 @@ def get_installations_count(search: str | None = None):
 
 
 def get_installations_by_client(client_code: str):
+    has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
 
-    if has_contract_number:
+    if has_no_installation:
         query = text(
             """
-            SELECT *
-            FROM genius.installations
-            WHERE client_code = :client_code
-            ORDER BY contract_number ASC, id ASC
+            SELECT i.*, i.no_installation AS no_installation_display
+            FROM genius.installations i
+            WHERE i.client_code = :client_code
+            ORDER BY COALESCE(NULLIF(regexp_replace(lower(i.no_installation), '[^0-9]', '', 'g'), '')::INTEGER, 0) ASC, i.id ASC
+            """
+        )
+    elif has_contract_number:
+        query = text(
+            """
+            SELECT i.*, ('contrato-' || i.contract_number::text) AS no_installation_display
+            FROM genius.installations i
+            WHERE i.client_code = :client_code
+            ORDER BY i.contract_number ASC, i.id ASC
             """
         )
     else:
         query = text(
             """
-            SELECT *, NULL::INTEGER AS contract_number
-            FROM genius.installations
-            WHERE client_code = :client_code
-            ORDER BY id ASC
+            SELECT i.*, NULL::VARCHAR AS no_installation_display
+            FROM genius.installations i
+            WHERE i.client_code = :client_code
+            ORDER BY i.id ASC
             """
         )
 
@@ -103,8 +144,14 @@ def get_installations_by_client(client_code: str):
 
 
 def get_latest_installation_by_client(client_code):
+    has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
-    order_clause = "contract_number DESC, id DESC" if has_contract_number else "install_date DESC, id DESC"
+    if has_no_installation:
+        order_clause = "COALESCE(NULLIF(regexp_replace(lower(no_installation), '[^0-9]', '', 'g'), '')::INTEGER, 0) DESC, id DESC"
+    elif has_contract_number:
+        order_clause = "contract_number DESC, id DESC"
+    else:
+        order_clause = "install_date DESC, id DESC"
 
     query = text(
         f"""
@@ -147,9 +194,45 @@ def create_installation(
     mac_address,
     comment,
 ):
+    has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
 
-    if has_contract_number:
+    if has_no_installation:
+        query = text(
+            """
+            INSERT INTO genius.installations (
+                client_code,
+                no_installation,
+                install_date,
+                location,
+                mac_address,
+                comment
+            ) VALUES (
+                :client_code,
+                (
+                    SELECT 'contrato-' || (
+                        COALESCE(
+                            MAX(
+                                NULLIF(
+                                    regexp_replace(lower(i.no_installation), '[^0-9]', '', 'g'),
+                                    ''
+                                )::INTEGER
+                            ),
+                            0
+                        ) + 1
+                    )::text
+                    FROM genius.installations i
+                    WHERE i.client_code = :client_code
+                ),
+                :install_date,
+                :location,
+                :mac_address,
+                :comment
+            )
+            RETURNING id
+            """
+        )
+    elif has_contract_number:
         query = text(
             """
             INSERT INTO genius.installations (

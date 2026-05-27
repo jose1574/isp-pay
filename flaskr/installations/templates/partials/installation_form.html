@@ -61,7 +61,7 @@
                             hx-target="#installation-form-container"
                             hx-swap="outerHTML"
                         >
-                            <td>Contrato-{{ item.contract_number if item.contract_number is not none else '?' }}</td>
+                            <td>{{ item.no_installation if item.no_installation else 'contrato-?' }}</td>
                             <td>{{ item.install_date }}</td>
                             <td>{{ item.location }}</td>
                             <td>{{ item.mac_address }}</td>

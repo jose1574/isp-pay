@@ -5,6 +5,40 @@ from flask import current_app
 from flaskr import db
 
 
+def _has_no_installation_column() -> bool:
+    exists = db.session.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'genius'
+                  AND table_name = 'installations'
+                  AND column_name = 'no_installation'
+            )
+            """
+        )
+    ).scalar_one()
+    return bool(exists)
+
+
+def _has_contract_number_column() -> bool:
+    exists = db.session.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'genius'
+                  AND table_name = 'installations'
+                  AND column_name = 'contract_number'
+            )
+            """
+        )
+    ).scalar_one()
+    return bool(exists)
+
+
 def get_plans(page: int | None = None, per_page: int | None = None, search: str | None = None):
     search = (search or '').strip()
     where_clause = ''
@@ -208,13 +242,23 @@ def get_subscriptions(page: int | None = None, per_page: int | None = None, sear
         """
         params['search'] = f"%{search}%"
 
+    has_no_installation = _has_no_installation_column()
+    has_contract_number = _has_contract_number_column()
+
+    if has_no_installation:
+        installation_alias_expr = "i.no_installation"
+    elif has_contract_number:
+        installation_alias_expr = "('contrato-' || i.contract_number::text)"
+    else:
+        installation_alias_expr = "NULL::VARCHAR"
+
     base_query = f"""
         SELECT
             s.*,
             p.description AS plan_description,
             i.location AS installation_location,
             i.install_date AS installation_date,
-            i.contract_number AS installation_contract_number
+            {installation_alias_expr} AS installation_no_installation
         FROM genius.subscription s
         LEFT JOIN genius.plans p ON p.code = s.plan_code
         LEFT JOIN genius.installations i ON i.id = s.installation
@@ -222,47 +266,16 @@ def get_subscriptions(page: int | None = None, per_page: int | None = None, sear
         ORDER BY s.correlative DESC
     """
 
-    fallback_query = f"""
-        SELECT
-            s.*,
-            p.description AS plan_description,
-            i.location AS installation_location,
-            i.install_date AS installation_date,
-            NULL::INTEGER AS installation_contract_number
-        FROM genius.subscription s
-        LEFT JOIN genius.plans p ON p.code = s.plan_code
-        LEFT JOIN genius.installations i ON i.id = s.installation
-        {where_clause}
-        ORDER BY s.correlative DESC
-    """
+    if page is None or per_page is None:
+        return db.session.execute(text(base_query), params).fetchall()
 
-    try:
-        if page is None or per_page is None:
-            return db.session.execute(text(base_query), params).fetchall()
-
-        offset = (page - 1) * per_page
-        params['limit'] = per_page
-        params['offset'] = offset
-        return db.session.execute(
-            text(base_query + " LIMIT :limit OFFSET :offset"),
-            params,
-        ).fetchall()
-    except SQLAlchemyError as error:
-        db.session.rollback()
-        if getattr(getattr(error, 'orig', None), 'pgcode', None) != '42703':
-            raise
-
-        # Compatibilidad temporal: BD sin columna installations.contract_number.
-        if page is None or per_page is None:
-            return db.session.execute(text(fallback_query), params).fetchall()
-
-        offset = (page - 1) * per_page
-        params['limit'] = per_page
-        params['offset'] = offset
-        return db.session.execute(
-            text(fallback_query + " LIMIT :limit OFFSET :offset"),
-            params,
-        ).fetchall()
+    offset = (page - 1) * per_page
+    params['limit'] = per_page
+    params['offset'] = offset
+    return db.session.execute(
+        text(base_query + " LIMIT :limit OFFSET :offset"),
+        params,
+    ).fetchall()
 
 
 def get_subscriptions_count(search: str | None = None):
@@ -286,32 +299,38 @@ def get_subscriptions_count(search: str | None = None):
 
 
 def get_installations_by_client(client_code: str):
-    query = text(
-        """
-        SELECT id, client_code, contract_number, install_date, location, mac_address
-        FROM genius.installations
-        WHERE client_code = :client_code
-        ORDER BY contract_number ASC, id ASC
-        """
-    )
+    has_no_installation = _has_no_installation_column()
+    has_contract_number = _has_contract_number_column()
 
-    fallback_query = text(
-        """
-        SELECT id, client_code, NULL::INTEGER AS contract_number, install_date, location, mac_address
-        FROM genius.installations
-        WHERE client_code = :client_code
-        ORDER BY id ASC
-        """
-    )
+    if has_no_installation:
+        query = text(
+            """
+            SELECT id, client_code, no_installation, install_date, location, mac_address
+            FROM genius.installations
+            WHERE client_code = :client_code
+            ORDER BY COALESCE(NULLIF(regexp_replace(lower(no_installation), '[^0-9]', '', 'g'), '')::INTEGER, 0) ASC, id ASC
+            """
+        )
+    elif has_contract_number:
+        query = text(
+            """
+            SELECT id, client_code, ('contrato-' || contract_number::text) AS no_installation, install_date, location, mac_address
+            FROM genius.installations
+            WHERE client_code = :client_code
+            ORDER BY contract_number ASC, id ASC
+            """
+        )
+    else:
+        query = text(
+            """
+            SELECT id, client_code, NULL::VARCHAR AS no_installation, install_date, location, mac_address
+            FROM genius.installations
+            WHERE client_code = :client_code
+            ORDER BY id ASC
+            """
+        )
 
-    try:
-        return db.session.execute(query, {'client_code': client_code}).fetchall()
-    except SQLAlchemyError as error:
-        db.session.rollback()
-        if getattr(getattr(error, 'orig', None), 'pgcode', None) != '42703':
-            raise
-
-        return db.session.execute(fallback_query, {'client_code': client_code}).fetchall()
+    return db.session.execute(query, {'client_code': client_code}).fetchall()
 
 
 def get_subscription_by_installation(installation_id: int):

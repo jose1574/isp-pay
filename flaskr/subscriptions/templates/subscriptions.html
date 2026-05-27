@@ -58,7 +58,7 @@
           <td>{{ subscription.client_code if subscription.client_code is defined else '-' }}</td>
           <td>
             {% if subscription.installation is not none %}
-              Contrato-{{ subscription.installation_contract_number if subscription.installation_contract_number is not none else '?' }} | #{{ subscription.installation }}
+              {{ subscription.installation_no_installation if subscription.installation_no_installation else 'contrato-?' }} | #{{ subscription.installation }}
             {% else %}
               -
             {% endif %}

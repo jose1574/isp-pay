@@ -52,7 +52,7 @@
 					<option value="">Seleccione una instalacion</option>
 					{% for installation in installations %}
 					<option value="{{ installation.id }}" {% if selected_installation == installation.id %}selected{% endif %}>
-						Contrato-{{ installation.contract_number if installation.contract_number is not none else '?' }} | #{{ installation.id }} - {{ installation.location }} ({{ installation.install_date }})
+						{{ installation.no_installation if installation.no_installation else 'contrato-?' }} | - ({{ installation.install_date }})
 					</option>
 					{% endfor %}
 				</select>
