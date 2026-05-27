@@ -17,35 +17,66 @@ def clients():
 
 
 
-@clients_bp.route('/add', methods=['GET'])
-def add_client():
+@clients_bp.route('/client', methods=['GET'])
+def client():
+    code = request.args.get('code')
+    client = get_client(code) if code else None
     area_sales = get_area_sales()
-    client_code = request.args.get('code')
-    client = None
-    alert_message = None
-    alert_type = None
+    return render_template(
+        'client.html',
+        client=client,
+        code=client.code if client else code,
+        area_sales=area_sales,
+        form_enabled=True,
+    )
 
-    if client_code:
-        client = get_client(client_code)
-        if client:
-            alert_message = "Cliente encontrado, puedes actualizar sus datos"
-            alert_type = "info"
-        else:
-            alert_message = "No se encontró el cliente, puedes registrar uno nuevo con este código"
-            alert_type = "warning"
 
-    context = {
-        'area_sales': area_sales,
-        'client': client,
-        'searched_code': client_code or '',
-        'alert_message': alert_message,
-        'alert_type': alert_type,
-    }
+@clients_bp.route('/get_client', methods=['GET'])
+def search_client():
+    code = request.args.get('code')
+    client = get_client(code)
+    area_sales = get_area_sales()
 
-    if request.headers.get('HX-Request') == 'true':
-        return render_template('partials/client_form.html', **context)
+    if client:
+        if request.headers.get('HX-Request') == 'true':
+            return render_template(
+                'partials/client_form.html',
+                client=client,
+                code=client.code,
+                area_sales=area_sales,
+                form_enabled=True,
+            )
 
-    return render_template('add_client.html', **context)
+        return render_template(
+            'client.html',
+            client=client,
+            code=client.code,
+            area_sales=area_sales,
+            form_enabled=True,
+        )
+    else:
+        flash("Cliente no encontrado, ingrese datos para crear un nuevo cliente", "warning")
+        if request.headers.get('HX-Request') == 'true':
+            return (
+                '',
+                204,
+                {'HX-Redirect': url_for('clients.client', code=code)}
+            )
+
+        return render_template(
+            'client.html',
+            client=client,
+            code=code,
+            area_sales=area_sales,
+            form_enabled=True,
+        )
+
+
+
+
+
+
+
 
 
 
@@ -77,7 +108,7 @@ def save_client():
         flash(f'Error al guardar el cliente: {str(e)}', 'danger')
 
     flash("Se actualizaron correctamente los datos" if existing_client else "Se guardaron correctamente los datos", 'success')
-    return redirect(url_for('clients.add_client'))
+    return redirect(url_for('clients.client'))
 
 
 @clients_bp.route('/modal_clients')

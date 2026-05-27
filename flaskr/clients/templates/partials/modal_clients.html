@@ -20,7 +20,7 @@
                         <tbody>
                             {% for client in clients %}
                                 <tr
-                                onclick="window.location='{{ url_for('clients.add_client', code=client.code) }}';"
+                                onclick="window.location='{{ url_for('clients.client', code=client.code) }}';"
                                 style="cursor: pointer;" 
                                 class="align-middle"
                                 >
