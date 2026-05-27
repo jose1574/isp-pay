@@ -1,0 +1,173 @@
+<div id="installation-form-container">
+
+    <p class="h3 mt-2">Buscar Cliente</p>
+    <div >
+        <label for="code" class="form-label">Cédula</label>
+        <div class="input-group mb-3">
+            <input 
+            type="text" 
+            id="code"
+            name="code"
+            class="form-control" 
+            placeholder="Ingrese Cédula" 
+            aria-label="Ingrese Cédula" 
+            aria-describedby="button-addon2"
+            value="{{ code if code else '' }}"
+            hx-get="{{ url_for('installations.search_client') }}"
+            hx-trigger="keyup[key=='Enter']"
+            hx-target="#installation-form-container"
+            hx-swap="outerHTML"
+            required
+            >
+            <button 
+            class="btn btn-primary" 
+            type="button" 
+            id="button-addon2"
+            hx-get="{{ url_for('installations.modal_clients') }}"
+            hx-trigger="click"
+            hx-target="#modal_clients_container"
+            >Buscar</button>
+        </div>
+    </div>
+    <form action="{{ url_for('installations.save_installation') }}" method="post" enctype="multipart/form-data" id="installation-form">
+        <input type="text" name="code" id="code-hidden" value="{{ code if code else '' }}" hidden>
+        <input type="text" name="installation_id" id="installation-id-hidden" value="{{ installation.id if installation else '' }}" hidden>
+        <div class="row">            
+            <div class="col">
+                <label for="install_date" class="form-label">Fecha de instalación</label>
+                <input type="date" id="install_date" name="install_date" class="form-control"
+                value="{{ installation.install_date if installation else '' }}" {% if not form_enabled %}disabled{% endif %} required>
+            </div>
+            <div class="col">
+                <label for="location" class="form-label">Ubicacion</label>
+                <input type="text" id="location" name="location" class="form-control" value="{{ installation.location if installation else '' }}"
+                {% if not form_enabled %}disabled{% endif %} required>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col">
+                <label for="mac_address" class="form-label">Dirección MAC</label>
+                <input type="text" id="mac_address" name="mac_address" class="form-control" value="{{ installation.mac_address if installation else '' }}"
+                {% if not form_enabled %}disabled{% endif %} required>
+            </div> 
+            <div class="col"></div>           
+        </div>
+        <hr>
+        <p class="h5">Contenido multimedia de la instalación</p>
+        <div class="row">
+            <div class="col">             
+                <div class="mb-3">
+                    <label for="image_label_onu" class="form-label">Foto de Etiqueta de la ONU</label>
+                    <input class="form-control" id="image_label_onu" name="image_label_onu" type="file" accept="image/*" {% if not form_enabled %}disabled{% endif %}>
+                    {% if media_urls and media_urls.image_label_onu %}
+                    <img src="{{ media_urls.image_label_onu }}" alt="Etiqueta ONU" class="img-thumbnail mt-2" style="max-height: 180px;">
+                    {% endif %}
+                </div>                      
+            </div>
+            <div class="col">             
+                <div class="mb-3">
+                    <label for="image_installation" class="form-label">Foto de Equipos Instalados</label>
+                    <input class="form-control" id="image_installation" name="image_installation" type="file" accept="image/*" {% if not form_enabled %}disabled{% endif %}>
+                    {% if media_urls and media_urls.image_installation %}
+                    <img src="{{ media_urls.image_installation }}" alt="Equipos instalados" class="img-thumbnail mt-2" style="max-height: 180px;">
+                    {% endif %}
+                </div>                      
+            </div>
+        </div>
+        <p class="h5">Detalles adicionales</p>
+
+        <div class="row">
+            <div class="col">
+                <div class="form-floating">
+                    <textarea class="form-control" name="comment" placeholder="Escribe tu comentario aquí" id="floatingTextarea2" style="height: 100px">{{ installation.comment if installation and installation.comment else '' }}</textarea>
+                    <label for="floatingTextarea2">Comentarios</label>
+                </div>
+            </div>
+        </div>
+
+      
+
+        <div class="mt-4">
+            <button type="submit" id="save-installation-btn" class="btn btn-success" disabled {% if not form_enabled %}disabled{% endif %}>Guardar</button>
+            <button
+                type="button"
+                class="btn btn-primary m-1"
+                hx-get="{{ url_for('installations.modal_clients') }}"
+                hx-trigger="click"
+                hx-target="#modal_clients_container"
+            >Buscar</button>
+            <button class="btn btn-danger" disabled>Eliminar</button>
+        </div>
+    </form>
+</div>
+<div id="modal_clients_container"></div>
+
+<script>
+    (function () {
+        const form = document.getElementById('installation-form');
+        const saveButton = document.getElementById('save-installation-btn');
+        const codeInput = document.getElementById('code');
+        const codeHiddenInput = document.getElementById('code-hidden');
+        const installDateInput = document.getElementById('install_date');
+
+        if (!form || !saveButton) {
+            return;
+        }
+
+        const isRequiredFieldComplete = (field) => {
+            if (field.disabled) {
+                return true;
+            }
+
+            return field.value.trim() !== '' && field.checkValidity();
+        };
+
+        const isFormComplete = () => {
+            const requiredFields = form.querySelectorAll('[required]');
+            return Array.from(requiredFields).every(isRequiredFieldComplete);
+        };
+
+        const updateSaveButtonState = () => {
+            const canSave = {{ 'true' if form_enabled else 'false' }} && isFormComplete();
+            saveButton.disabled = !canSave;
+        };
+
+        const syncCodeValue = () => {
+            if (codeInput && codeHiddenInput) {
+                codeHiddenInput.value = codeInput.value.trim();
+            }
+        };
+
+        syncCodeValue();
+
+        if (codeInput) {
+            codeInput.addEventListener('input', syncCodeValue);
+            codeInput.addEventListener('change', syncCodeValue);
+        }
+
+        form.addEventListener('input', updateSaveButtonState);
+        form.addEventListener('change', updateSaveButtonState);
+
+        form.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' && !isFormComplete()) {
+                event.preventDefault();
+            }
+        });
+
+        form.addEventListener('submit', function (event) {
+            syncCodeValue();
+
+            if (!isFormComplete()) {
+                event.preventDefault();
+                updateSaveButtonState();
+            }
+        });
+
+        // Al renderizar el parcial tras una búsqueda HTMX, mover el foco a la fecha.
+        if (codeInput && installDateInput && codeInput.value.trim() !== '' && !installDateInput.disabled) {
+            installDateInput.focus();
+        }
+
+        updateSaveButtonState();
+    })();
+</script>

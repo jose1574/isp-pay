@@ -1,0 +1,165 @@
+<div class="modal fade show" id="modalClientes" tabindex="-1" aria-labelledby="modalClientesLabel" style="display: block;" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalClientesLabel">Buscar Cliente</h5>
+                <button type="button" class="btn-close" onclick="cerrarModal()" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body">
+                <form
+                    class="d-flex align-items-center gap-2 mb-3"
+                    hx-get="{{ url_for('installations.modal_clients') }}"
+                    hx-target="#modal_clients_container"
+                    hx-swap="innerHTML"
+                >
+                    <input type="hidden" name="page" value="1">
+                    <input type="hidden" name="per_page" value="{{ per_page }}">
+                    <div class="input-group input-group-sm" style="max-width: 360px;">
+                        <span class="input-group-text" id="modal-search-label">Buscar</span>
+                        <input
+                            type="text"
+                            name="q"
+                            class="form-control"
+                            placeholder="Cedula, nombre o telefono"
+                            value="{{ q if q else '' }}"
+                            aria-label="Buscar cliente en modal"
+                            aria-describedby="modal-search-label"
+                            hx-trigger="keyup changed delay:300ms"
+                        >
+                        <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+                    </div>
+                    {% if q %}
+                    <a
+                        class="btn btn-sm btn-outline-secondary"
+                        hx-get="{{ url_for('installations.modal_clients', page=1, per_page=per_page) }}"
+                        hx-target="#modal_clients_container"
+                        hx-swap="innerHTML"
+                        href="{{ url_for('installations.modal_clients', page=1, per_page=per_page) }}"
+                    >Limpiar</a>
+                    {% endif %}
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Cédula</th>
+                                <th>Nombre</th>
+                                <th>Teléfono</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for client in clients %}
+                                <tr
+                                onclick="window.location='{{ url_for('installations.installation', code=client.code) }}';"
+                                style="cursor: pointer;" 
+                                class="align-middle"
+                                >
+                                        <td>
+                                        {{ client.code }}
+                                        </td>
+                                        <td>{{ client.description }}</td>
+                                        <td>{{ client.phone }}</td>
+                                </tr>
+                                 
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">No hay clientes registrados.</td>
+                            </tr>
+
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <small class="text-body-secondary">
+                        Mostrando {{ clients|length }} de {{ total_clients }} clientes
+                    </small>
+                    <small class="text-body-secondary">
+                        Pagina {{ page }} de {{ total_pages }}
+                    </small>
+                </div>
+
+                {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+                {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+                <nav aria-label="Paginacion modal de clientes" class="mt-2">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                            <a class="page-link"
+                               hx-get="{{ url_for('installations.modal_clients', page=1, per_page=per_page, q=q) }}"
+                               hx-target="#modal_clients_container"
+                               hx-swap="innerHTML"
+                               href="{{ url_for('installations.modal_clients', page=1, per_page=per_page, q=q) }}"
+                            >Primera</a>
+                        </li>
+
+                        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                            <a class="page-link"
+                               hx-get="{{ url_for('installations.modal_clients', page=page-1, per_page=per_page, q=q) }}"
+                               hx-target="#modal_clients_container"
+                               hx-swap="innerHTML"
+                               href="{{ url_for('installations.modal_clients', page=page-1, per_page=per_page, q=q) }}"
+                            >Anterior</a>
+                        </li>
+
+                        {% if start_page > 1 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+
+                        {% for p in range(start_page, end_page + 1) %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link"
+                               hx-get="{{ url_for('installations.modal_clients', page=p, per_page=per_page, q=q) }}"
+                               hx-target="#modal_clients_container"
+                               hx-swap="innerHTML"
+                               href="{{ url_for('installations.modal_clients', page=p, per_page=per_page, q=q) }}"
+                            >{{ p }}</a>
+                        </li>
+                        {% endfor %}
+
+                        {% if end_page < total_pages %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+
+                        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                            <a class="page-link"
+                               hx-get="{{ url_for('installations.modal_clients', page=page+1, per_page=per_page, q=q) }}"
+                               hx-target="#modal_clients_container"
+                               hx-swap="innerHTML"
+                               href="{{ url_for('installations.modal_clients', page=page+1, per_page=per_page, q=q) }}"
+                            >Siguiente</a>
+                        </li>
+
+                        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                            <a class="page-link"
+                               hx-get="{{ url_for('installations.modal_clients', page=total_pages, per_page=per_page, q=q) }}"
+                               hx-target="#modal_clients_container"
+                               hx-swap="innerHTML"
+                               href="{{ url_for('installations.modal_clients', page=total_pages, per_page=per_page, q=q) }}"
+                            >Ultima</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cerrar</button>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<div class="modal-backdrop fade show" id="modalBackdrop"></div>
+
+<script>
+    function cerrarModal() {
+        const modal = document.getElementById('modalClientes');
+        const backdrop = document.getElementById('modalBackdrop');
+        if(modal) modal.remove();
+        if(backdrop) backdrop.remove();
+    }
+</script>

@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block title %}Clientes{% endblock %}
+
+{% block header %}
+  <p class="h1 pb-4" style="text-align: center;">Lista de Instalaciones</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="container mt-3">
+<div id="options" class="d-flex align-items-center gap-3 flex-wrap">
+  <a href="{{ url_for('installations.installation')}}" class="btn btn-primary">Registrar nueva instalación</a>
+  <form method="get" action="{{ url_for('installations.installations') }}" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="per_page" value="{{ per_page }}">
+    <div class="input-group input-group-sm" style="max-width: 360px;">
+      <span class="input-group-text" id="inputGroup-sizing-sm">Buscar</span>
+      <input
+        type="text"
+        name="q"
+        class="form-control"
+        placeholder="Cedula, nombre o telefono"
+        value="{{ q if q else '' }}"
+        aria-label="Buscar cliente"
+        aria-describedby="inputGroup-sizing-sm"
+      >
+      <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+    </div>
+    {% if q %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('installations.installations', per_page=per_page) }}">Limpiar</a>
+    {% endif %}
+  </form>
+</div>      
+  <table class="table">
+    <thead>
+      <tr>
+         <th>Cédula</th>
+        <th>Nombre</th>
+        <th>Telefono</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for installation in installations %}
+      <tr      
+        onclick="window.location='{{ url_for('installations.installation', code=installation.code) }}';"
+        style="cursor: pointer;" 
+        class="align-middle"
+      >
+        <td>{{ installation.code }}</td>
+        <td>{{ installation.description }}</td>
+        <td>{{ installation.phone }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <small class="text-body-secondary">
+      Mostrando {{ installations|length }} de {{ total_installations }} instalaciones
+    </small>
+    <small class="text-body-secondary">
+      Pagina {{ page }} de {{ total_pages }}
+    </small>
+  </div>
+
+  <nav aria-label="Paginacion de instalaciones" class="mt-2">
+    {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+    {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+    <ul class="pagination mb-0">
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('installations.installations', page=1, per_page=per_page, q=q) }}" aria-label="Primera">Primera</a>
+      </li>
+
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('installations.installations', page=page-1, per_page=per_page, q=q) }}" aria-label="Anterior">Anterior</a>
+      </li>
+
+      {% if start_page > 1 %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+
+      {% for p in range(start_page, end_page + 1) %}
+      <li class="page-item {% if p == page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('installations.installations', page=p, per_page=per_page, q=q) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+
+      {% if end_page < total_pages %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+
+      <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('installations.installations', page=page+1, per_page=per_page, q=q) }}" aria-label="Siguiente">Siguiente</a>
+      </li>
+
+      <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('installations.installations', page=total_pages, per_page=per_page, q=q) }}" aria-label="Ultima">Ultima</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+
+{% endblock %}

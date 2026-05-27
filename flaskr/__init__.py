@@ -8,7 +8,7 @@ def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev")
-    app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://postgres:root@localhost:5432/cadm_v1029"
+    app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://postgres:root@localhost:5432/cadm_geniusnet"
 
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -31,6 +31,10 @@ def create_app(test_config=None):
     db.init_app(app)
 
     from . import clients
+    from . import installations
+
     app.register_blueprint(clients.clients_bp, url_prefix='/clients')
+    app.register_blueprint(installations.installations_bp, url_prefix='/installations')
+
 
     return app
