@@ -5,6 +5,7 @@ from . import installations_bp
 from werkzeug.utils import secure_filename
 
 from flaskr.clients.services.querys import get_clients, get_clients_count, get_client
+from flaskr.config.services.querys import get_routes
 from .services.querys import (
     get_installations,
     get_installations_by_client,
@@ -22,6 +23,7 @@ from .services.querys import (
 
 def _build_installation_context(client_code, installation_id=None, new_mode=False):
     installations = get_installations_by_client(client_code) if client_code else []
+    routes = get_routes()
     installation = None
 
     if installation_id:
@@ -51,6 +53,7 @@ def _build_installation_context(client_code, installation_id=None, new_mode=Fals
 
     return {
         'installations': installations,
+        'routes': routes,
         'installation': installation,
         'media_urls': media_urls,
         'show_form': bool(new_mode or installation),
@@ -113,6 +116,7 @@ def installation():
         code=client.code if client else code,
         form_enabled=True,
         installations=context['installations'],
+        routes=context['routes'],
         installation=context['installation'],
         media_urls=context['media_urls'],
         show_form=context['show_form'],
@@ -134,6 +138,7 @@ def search_client():
             code='',
             form_enabled=True,
             installations=[],
+            routes=get_routes(),
             installation=None,
             media_urls={},
             show_form=False,
@@ -153,6 +158,7 @@ def search_client():
                 code=client.code,
                 form_enabled=True,
                 installations=context['installations'],
+                routes=context['routes'],
                 installation=context['installation'],
                 media_urls=context['media_urls'],
                 show_form=context['show_form'],
@@ -164,6 +170,7 @@ def search_client():
             code=client.code,
             form_enabled=True,
             installations=context['installations'],
+            routes=context['routes'],
             installation=context['installation'],
             media_urls=context['media_urls'],
             show_form=context['show_form'],
@@ -183,6 +190,7 @@ def search_client():
         code=code,
         form_enabled=True,
         installations=[],
+        routes=get_routes(),
         installation=None,
         media_urls={},
         show_form=False,
@@ -202,6 +210,7 @@ def get_installation_form():
             code='',
             form_enabled=True,
             installations=[],
+            routes=get_routes(),
             installation=None,
             media_urls={},
             show_form=False,
@@ -221,6 +230,7 @@ def get_installation_form():
         code=code,
         form_enabled=True,
         installations=context['installations'],
+        routes=context['routes'],
         installation=context['installation'],
         media_urls=context['media_urls'],
         show_form=context['show_form'],
@@ -234,6 +244,7 @@ def save_installation():
     client_code = request.form.get('code')
     install_date = request.form.get('install_date')
     location = request.form.get('location')
+    raw_route_id = (request.form.get('route_id') or '').strip()
     mac_address = request.form.get('mac_address')
     comment = request.form.get('comment')
 
@@ -243,6 +254,25 @@ def save_installation():
 
     if not install_date or not location or not mac_address:
         flash('Complete todos los campos requeridos de la instalacion.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code))
+
+    if not raw_route_id:
+        flash('Seleccione el router donde esta conectada la instalacion.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code))
+
+    try:
+        route_id = int(raw_route_id)
+    except ValueError:
+        flash('Router invalido.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code))
+
+    available_routes = {route.correlative for route in get_routes()}
+    if not available_routes:
+        flash('Debe registrar al menos un router antes de guardar instalaciones.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code))
+
+    if available_routes and route_id not in available_routes:
+        flash('Seleccione un router valido.', 'warning')
         return redirect(url_for('installations.installation', code=client_code))
 
     installation_id = None
@@ -260,6 +290,7 @@ def save_installation():
             client_code=client_code,
             install_date=install_date,
             location=location,
+            route_id=route_id,
             mac_address=mac_address,
             comment=comment,
         )
@@ -276,6 +307,7 @@ def save_installation():
             client_code=client_code,
             install_date=install_date,
             location=location,
+            route_id=route_id,
             mac_address=mac_address,
             comment=comment,
         )

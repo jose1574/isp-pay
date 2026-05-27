@@ -243,6 +243,7 @@ CREATE TABLE IF NOT EXISTS genius.installations (
 	no_installation VARCHAR(40),
 	install_date DATE NOT NULL,
 	location VARCHAR(255) NOT NULL,
+	route_id BIGINT,
 	mac_address VARCHAR(50) NOT NULL,
 	comment TEXT,
 	created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
@@ -253,6 +254,57 @@ CREATE TABLE IF NOT EXISTS genius.installations (
 		ON UPDATE CASCADE
 		ON DELETE RESTRICT
 );
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'installations'
+		  AND column_name = 'route_id'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.installations ADD COLUMN route_id BIGINT';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.tables
+		WHERE table_schema = 'genius'
+		  AND table_name = 'routes'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'fk_installations_route'
+		  AND rel.relname = 'installations'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.installations ADD CONSTRAINT fk_installations_route FOREIGN KEY (route_id) REFERENCES genius.routes(correlative) ON UPDATE CASCADE ON DELETE SET NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_installations_route_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_installations_route_id ON genius.installations(route_id)';
+	END IF;
+END
+$$;
 
 DO $$
 BEGIN
@@ -551,5 +603,214 @@ $$;
 
 CREATE TRIGGER trg_set_updated_at_installation_media
 BEFORE UPDATE ON genius.installation_media
+FOR EACH ROW
+EXECUTE PROCEDURE genius.set_updated_at();
+
+
+-- Tabla de routers para gestion de conexiones Mikrotik
+CREATE TABLE IF NOT EXISTS genius.routes (
+	correlative BIGSERIAL PRIMARY KEY,
+	ip_address VARCHAR(64) NOT NULL,
+	mac_address VARCHAR(50),
+	identity VARCHAR(150),
+	description TEXT,
+	api_port INTEGER NOT NULL DEFAULT 8728,
+	is_active BOOLEAN NOT NULL DEFAULT TRUE,
+	username VARCHAR(120) NOT NULL,
+	password VARCHAR(255) NOT NULL,
+	created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+	updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'routes'
+		  AND column_name = 'api_port'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.routes ADD COLUMN api_port INTEGER';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'routes'
+		  AND column_name = 'api_port'
+	) THEN
+		EXECUTE 'UPDATE genius.routes SET api_port = 8728 WHERE api_port IS NULL';
+		EXECUTE 'ALTER TABLE genius.routes ALTER COLUMN api_port SET DEFAULT 8728';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'routes'
+		  AND column_name = 'api_port'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM genius.routes
+		WHERE api_port IS NULL
+	) THEN
+		EXECUTE 'ALTER TABLE genius.routes ALTER COLUMN api_port SET NOT NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'chk_routes_api_port'
+		  AND rel.relname = 'routes'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.routes ADD CONSTRAINT chk_routes_api_port CHECK (api_port BETWEEN 1 AND 65535)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'routes'
+		  AND column_name = 'is_active'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.routes ADD COLUMN is_active BOOLEAN';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'routes'
+		  AND column_name = 'is_active'
+	) THEN
+		EXECUTE 'UPDATE genius.routes SET is_active = TRUE WHERE is_active IS NULL';
+		EXECUTE 'ALTER TABLE genius.routes ALTER COLUMN is_active SET DEFAULT TRUE';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'routes'
+		  AND column_name = 'is_active'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM genius.routes
+		WHERE is_active IS NULL
+	) THEN
+		EXECUTE 'ALTER TABLE genius.routes ALTER COLUMN is_active SET NOT NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'uq_routes_ip_address'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE UNIQUE INDEX uq_routes_ip_address ON genius.routes(ip_address)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'uq_routes_mac_normalized'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE UNIQUE INDEX uq_routes_mac_normalized ON genius.routes (regexp_replace(lower(mac_address), ''[^0-9a-f]'', '''', ''g'')) WHERE mac_address IS NOT NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_routes_identity'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_routes_identity ON genius.routes(identity)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_routes_is_active'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_routes_is_active ON genius.routes(is_active)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM pg_trigger t
+		JOIN pg_class c ON c.oid = t.tgrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE t.tgname = 'trg_set_updated_at_routes'
+		  AND c.relname = 'routes'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'DROP TRIGGER trg_set_updated_at_routes ON genius.routes';
+	END IF;
+END
+$$;
+
+CREATE TRIGGER trg_set_updated_at_routes
+BEFORE UPDATE ON genius.routes
 FOR EACH ROW
 EXECUTE PROCEDURE genius.set_updated_at();

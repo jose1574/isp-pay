@@ -1,0 +1,242 @@
+<div id="route-form-container" class="container">
+	<p class="h3 mt-2">Gestion de Routers</p>
+
+	<div class="card mb-3">
+		<div class="card-header d-flex justify-content-between align-items-center">
+			<span>Routers registrados</span>
+			<button
+				type="button"
+				class="btn btn-sm btn-success"
+				hx-get="{{ url_for('config.get_route_form', mode='new') }}"
+				hx-target="#route-form-container"
+				hx-swap="outerHTML"
+			>Registrar Router</button>
+		</div>
+		<div class="card-body p-0">
+			<div class="table-responsive">
+				<table class="table table-hover mb-0">
+					<thead>
+						<tr>
+							<th>IP</th>
+							<th>Puerto API</th>
+							<th>Estado</th>
+							<th>MAC</th>
+							<th>Identity</th>
+							<th>Usuario</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for item in routes %}
+						<tr
+							style="cursor: pointer;"
+							class="align-middle {% if route and route.correlative == item.correlative %}table-active{% endif %}"
+							hx-get="{{ url_for('config.get_route_form', correlative=item.correlative) }}"
+							hx-target="#route-form-container"
+							hx-swap="outerHTML"
+						>
+							<td>{{ item.ip_address }}</td>
+							<td>{{ item.api_port if item.api_port is not none else 8728 }}</td>
+							<td>{{ 'Activo' if item.is_active else 'Inactivo' }}</td>
+							<td>{{ item.mac_address if item.mac_address else '-' }}</td>
+							<td>{{ item.identity if item.identity else '-' }}</td>
+							<td>{{ item.username }}</td>
+						</tr>
+						{% else %}
+						<tr>
+							<td colspan="6" class="text-center text-muted py-3">Aun no hay routers registrados.</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	{% if show_form %}
+	<form action="{{ url_for('config.save_route') }}" method="post" id="route-form">
+		<input type="text" name="correlative" id="correlative-hidden" value="{{ route.correlative if route else '' }}" hidden>
+		<p class="h5">{{ 'Registrar router' if new_mode else 'Editar router' }}</p>
+
+		<div class="row">
+			<div class="col">
+				<label for="ip_address" class="form-label">Direccion IP</label>
+				<input
+					type="text"
+					id="ip_address"
+					name="ip_address"
+					class="form-control"
+					value="{{ route.ip_address if route else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+			<div class="col">
+				<label for="mac_address" class="form-label">Direccion MAC</label>
+				<input
+					type="text"
+					id="mac_address"
+					name="mac_address"
+					class="form-control"
+					value="{{ route.mac_address if route and route.mac_address else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+				>
+			</div>
+		</div>
+
+		<div class="row mt-3">
+			<div class="col">
+				<label for="api_port" class="form-label">Puerto API</label>
+				<input
+					type="number"
+					id="api_port"
+					name="api_port"
+					class="form-control"
+					min="1"
+					max="65535"
+					value="{{ route.api_port if route and route.api_port is not none else 8728 }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+			<div class="col">
+				<label for="identity" class="form-label">Identity</label>
+				<input
+					type="text"
+					id="identity"
+					name="identity"
+					class="form-control"
+					value="{{ route.identity if route and route.identity else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+				>
+			</div>
+			<div class="col">
+				<label for="username" class="form-label">Usuario</label>
+				<input
+					type="text"
+					id="username"
+					name="username"
+					class="form-control"
+					value="{{ route.username if route else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+			<div class="col">
+				<label for="password" class="form-label">Clave</label>
+				<input
+					type="password"
+					id="password"
+					name="password"
+					class="form-control"
+					value="{{ route.password if route else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+		</div>
+
+		<div class="row mt-3">
+			<div class="col">
+				<div class="form-check form-switch mt-4">
+					<input
+						class="form-check-input"
+						type="checkbox"
+						id="is_active"
+						name="is_active"
+						{% if route is none or route.is_active %}checked{% endif %}
+						{% if not form_enabled %}disabled{% endif %}
+					>
+					<label class="form-check-label" for="is_active">Router activo</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="row mt-3">
+			<div class="col">
+				<div class="form-floating">
+					<textarea
+						class="form-control"
+						name="description"
+						placeholder="Descripcion"
+						id="description"
+						style="height: 100px"
+					>{{ route.description if route and route.description else '' }}</textarea>
+					<label for="description">Descripcion</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="mt-4">
+			<button type="submit" id="save-route-btn" class="btn btn-success" disabled {% if not form_enabled %}disabled{% endif %}>Guardar</button>
+			<button
+				type="button"
+				class="btn btn-primary m-1"
+				hx-get="{{ url_for('config.get_route_form', mode='new') }}"
+				hx-trigger="click"
+				hx-target="#route-form-container"
+				hx-swap="outerHTML"
+			>Nuevo</button>
+			<button
+				type="submit"
+				id="delete-route-btn"
+				class="btn btn-danger"
+				formaction="{{ url_for('config.remove_route') }}"
+				formmethod="post"
+				formnovalidate
+				{% if not route %}disabled{% endif %}
+			>Eliminar</button>
+		</div>
+	</form>
+	{% endif %}
+</div>
+
+<script>
+	(function () {
+		const form = document.getElementById('route-form');
+		const saveButton = document.getElementById('save-route-btn');
+
+		if (!form || !saveButton) {
+			return;
+		}
+
+		const isRequiredFieldComplete = (field) => {
+			if (field.disabled) {
+				return true;
+			}
+
+			return field.value.trim() !== '' && field.checkValidity();
+		};
+
+		const isFormComplete = () => {
+			const requiredFields = form.querySelectorAll('[required]');
+			return Array.from(requiredFields).every(isRequiredFieldComplete);
+		};
+
+		const updateSaveButtonState = () => {
+			const canSave = {{ 'true' if form_enabled else 'false' }} && isFormComplete();
+			saveButton.disabled = !canSave;
+		};
+
+		form.addEventListener('input', updateSaveButtonState);
+		form.addEventListener('change', updateSaveButtonState);
+
+		form.addEventListener('keydown', function (event) {
+			if (event.key === 'Enter' && !isFormComplete()) {
+				event.preventDefault();
+			}
+		});
+
+		form.addEventListener('submit', function (event) {
+			if (event.submitter && event.submitter.id === 'delete-route-btn') {
+				return;
+			}
+
+			if (!isFormComplete()) {
+				event.preventDefault();
+				updateSaveButtonState();
+			}
+		});
+
+		updateSaveButtonState();
+	})();
+</script>

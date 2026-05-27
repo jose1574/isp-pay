@@ -49,6 +49,7 @@
                             <th>Contrato</th>
                             <th>Fecha</th>
                             <th>Ubicación</th>
+                            <th>Router</th>
                             <th>MAC</th>
                         </tr>
                     </thead>
@@ -64,11 +65,12 @@
                             <td>{{ item.no_installation if item.no_installation else 'contrato-?' }}</td>
                             <td>{{ item.install_date }}</td>
                             <td>{{ item.location }}</td>
+                            <td>{{ item.route_display if item.route_display else '-' }}</td>
                             <td>{{ item.mac_address }}</td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted py-3">Este cliente aun no tiene instalaciones.</td>
+                            <td colspan="5" class="text-center text-muted py-3">Este cliente aun no tiene instalaciones.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -101,7 +103,25 @@
                 <input type="text" id="mac_address" name="mac_address" class="form-control" value="{{ installation.mac_address if installation else '' }}"
                 {% if not form_enabled %}disabled{% endif %} required>
             </div> 
-            <div class="col"></div>           
+            <div class="col">
+                <label for="route_id" class="form-label">Router</label>
+                <select
+                    id="route_id"
+                    name="route_id"
+                    class="form-select"
+                    {% if not form_enabled %}disabled{% endif %}
+                    required
+                >
+                    <option value="" {% if not installation or not installation.route_id %}selected{% endif %} disabled>Seleccione un router</option>
+                    {% for route in routes %}
+                    <option value="{{ route.correlative }}" {% if installation and installation.route_id == route.correlative %}selected{% endif %}>
+                        {{ route.identity if route.identity else route.ip_address }}{% if not route.is_active %} (Inactivo){% endif %}
+                    </option>
+                    {% else %}
+                    <option value="" disabled>No hay routers registrados</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
         <hr>
         <p class="h5">Contenido multimedia de la instalación</p>
