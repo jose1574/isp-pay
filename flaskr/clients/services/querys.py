@@ -4,9 +4,45 @@ from flask import current_app
 
 from flaskr import db
 
-def get_clients():
-    clients = db.session.execute(text("SELECT * FROM clients")).fetchall()
+def get_clients(page: int | None = None, per_page: int | None = None, search: str | None = None):
+    search = (search or '').strip()
+    where_clause = ''
+    params = {}
+
+    if search:
+        where_clause = " WHERE code ILIKE :search OR description ILIKE :search OR phone ILIKE :search"
+        params['search'] = f"%{search}%"
+
+    if page is None or per_page is None:
+        clients = db.session.execute(
+            text(f"SELECT * FROM clients{where_clause} ORDER BY code"),
+            params,
+        ).fetchall()
+        return clients
+
+    offset = (page - 1) * per_page
+    params['limit'] = per_page
+    params['offset'] = offset
+    clients = db.session.execute(
+        text(f"SELECT * FROM clients{where_clause} ORDER BY code LIMIT :limit OFFSET :offset"),
+        params,
+    ).fetchall()
     return clients
+
+def get_clients_count(search: str | None = None):
+    search = (search or '').strip()
+    where_clause = ''
+    params = {}
+
+    if search:
+        where_clause = " WHERE code ILIKE :search OR description ILIKE :search OR phone ILIKE :search"
+        params['search'] = f"%{search}%"
+
+    total = db.session.execute(
+        text(f"SELECT COUNT(*) FROM clients{where_clause}"),
+        params,
+    ).scalar_one()
+    return total
 
 def get_client(code: str ):
     client = db.session.execute(text('SELECT * FROM clients WHERE code= :code'), {"code": code}).first()

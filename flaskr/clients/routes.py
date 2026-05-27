@@ -2,18 +2,46 @@ from flask import render_template, request, redirect, url_for, flash
 from . import clients_bp  
 from .services.querys import (
     get_clients, 
+    get_clients_count,
     get_client, 
     get_area_sales, 
     create_client,
     )
 
 
-
-
 @clients_bp.route('/')
 def clients():
-    clients = get_clients()
-    return render_template('clients.html', clients=clients)
+    q = (request.args.get('q') or '').strip()
+
+    try:
+        page = int(request.args.get('page', 1))
+    except ValueError:
+        page = 1
+
+    try:
+        per_page = int(request.args.get('per_page', 10))
+    except ValueError:
+        per_page = 10
+
+    page = max(1, page)
+    per_page = min(max(5, per_page), 100)
+
+    total_clients = get_clients_count(search=q)
+    total_pages = max(1, (total_clients + per_page - 1) // per_page)
+
+    if page > total_pages:
+        page = total_pages
+
+    clients = get_clients(page=page, per_page=per_page, search=q)
+    return render_template(
+        'clients.html',
+        clients=clients,
+        q=q,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        total_clients=total_clients,
+    )
 
 
 
@@ -72,14 +100,6 @@ def search_client():
         )
 
 
-
-
-
-
-
-
-
-
 @clients_bp.route('/add/save', methods=['POST'])
 def save_client():
     code = request.form.get('code')
@@ -113,5 +133,34 @@ def save_client():
 
 @clients_bp.route('/modal_clients')
 def modal_clients():
-    clients = get_clients()
-    return render_template('partials/modal_clients.html', clients=clients)
+    q = (request.args.get('q') or '').strip()
+
+    try:
+        page = int(request.args.get('page', 1))
+    except ValueError:
+        page = 1
+
+    try:
+        per_page = int(request.args.get('per_page', 10))
+    except ValueError:
+        per_page = 10
+
+    page = max(1, page)
+    per_page = min(max(5, per_page), 100)
+
+    total_clients = get_clients_count(search=q)
+    total_pages = max(1, (total_clients + per_page - 1) // per_page)
+
+    if page > total_pages:
+        page = total_pages
+
+    clients = get_clients(page=page, per_page=per_page, search=q)
+    return render_template(
+        'partials/modal_clients.html',
+        clients=clients,
+        q=q,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        total_clients=total_clients,
+    )
