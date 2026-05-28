@@ -36,3 +36,5 @@ class MikroTikClient:
                 
         except requests.exceptions.RequestException as e:
             return f"No se pudo conectar al MikroTik: {str(e)}", False
+        
+

@@ -564,3 +564,36 @@ def update_subscription_status(correlative: int, status: str):
         db.session.rollback()
         current_app.logger.exception('Error inesperado al actualizar estado de suscripcion: %s', error)
         return False
+
+
+def get_overdue_active_subscriptions(reference_date=None):
+    params = {}
+    date_expression = 'CURRENT_DATE'
+
+    if reference_date is not None:
+        date_expression = ':reference_date'
+        params['reference_date'] = reference_date
+
+    return db.session.execute(
+        text(
+            f"""
+            SELECT
+                s.correlative,
+                s.client_code,
+                s.installation,
+                s.status,
+                s.cutoff_day,
+                s.credit_day,
+                i.mac_address AS installation_mac_address
+            FROM genius.subscription s
+            LEFT JOIN genius.installations i ON i.id = s.installation
+            WHERE s.status = 'activo'
+              AND s.cutoff_day IS NOT NULL
+              AND s.credit_day IS NOT NULL
+              AND {date_expression} > (s.cutoff_day + s.credit_day)
+            ORDER BY s.cutoff_day ASC, s.correlative ASC
+            """
+        )
+        ,
+        params,
+    ).fetchall()

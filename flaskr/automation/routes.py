@@ -2,6 +2,7 @@ from flask import render_template, flash, redirect, url_for, request
 
 from flaskr import mk_router
 from flaskr.subscriptions.services.querys import update_subscription_status
+from .services.worker import client_activation, suspend_overdue_subscriptions
 
 from . import automation_bp
 
@@ -21,72 +22,6 @@ def obtener_info_sistema():
         'status': 'error',
         'message': datos,
     }
-
-def client_activation(mac_address: str, enabled: bool = True):
-    if not mac_address:
-        return False, 'La direccion MAC es obligatoria.'
-
-    endpoint = '/ip/dhcp-server/lease'
-    leases, exito = mk_router.query(endpoint)
-
-    if not exito:
-        return False, leases
-
-    if not isinstance(leases, list):
-        return False, 'Respuesta invalida del MikroTik al consultar leases DHCP.'
-
-    mac_normalizada = mac_address.strip().upper()
-    if len(mac_normalizada.replace(':', '').replace('-', '')) == 12:
-        mac_normalizada = ':'.join(
-            mac_normalizada.replace(':', '').replace('-', '')[index:index + 2]
-            for index in range(0, 12, 2)
-        )
-
-    lease_id = None
-    for lease in leases:
-        if not isinstance(lease, dict):
-            continue
-        lease_mac = (lease.get('mac-address') or '').upper()
-        if lease_mac == mac_normalizada:
-            lease_id = lease.get('.id') or lease.get('id')
-            break
-
-    if not lease_id:
-        return False, f'No se encontro una lease DHCP para la MAC {mac_normalizada}.'
-
-    action = 'no' if enabled else 'yes'
-    response = mk_router.query(
-        f'/ip/dhcp-server/lease/{lease_id}',
-    )
-
-    if isinstance(response, tuple):
-        _, ok = response
-        if not ok:
-            return False, 'No fue posible actualizar block-access en la lease DHCP.'
-
-    try:
-        import requests
-        from requests.auth import HTTPBasicAuth
-        import urllib3
-
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        patch_response = requests.patch(
-            f"{mk_router.base_url}/ip/dhcp-server/lease/{lease_id}",
-            auth=HTTPBasicAuth(mk_router.auth.username, mk_router.auth.password),
-            verify=False,
-            timeout=5,
-            json={'block-access': action},
-        )
-        if patch_response.status_code not in (200, 204):
-            return False, f'Error del router {patch_response.status_code}: {patch_response.text}'
-    except Exception as error:
-        return False, f'No se pudo actualizar el cliente en el MikroTik: {error}'
-
-    estado = 'activado' if enabled else 'desactivado'
-    return True, f'Cliente {estado} correctamente.'
-    
-
-
 @automation_bp.route('/')
 def automation():
     info = obtener_info_sistema()
@@ -128,3 +63,23 @@ def deactivate_client(mac_address):
 
     flash(mensaje, 'danger')
     return redirect(url_for('subscriptions.subscriptions'))
+
+
+@automation_bp.route('/run-overdue-check', methods=['POST'])
+def run_overdue_check():
+    result = suspend_overdue_subscriptions()
+
+    if result['suspended']:
+        flash(
+            f"Se suspendieron {result['suspended']} suscripciones vencidas por falta de pago.",
+            'warning',
+        )
+    elif result['processed']:
+        flash('Se revisaron suscripciones vencidas, pero no todas pudieron suspenderse.', 'warning')
+    else:
+        flash('No hay suscripciones vencidas para suspender en este momento.', 'success')
+
+    for error in result['errors'][:3]:
+        flash(error, 'danger')
+
+    return redirect(url_for('automation.automation'))
