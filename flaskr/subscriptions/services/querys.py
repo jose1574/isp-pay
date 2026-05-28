@@ -258,6 +258,7 @@ def get_subscriptions(page: int | None = None, per_page: int | None = None, sear
             p.description AS plan_description,
             i.location AS installation_location,
             i.install_date AS installation_date,
+            i.mac_address AS installation_mac_address,
             {installation_alias_expr} AS installation_no_installation
         FROM genius.subscription s
         LEFT JOIN genius.plans p ON p.code = s.plan_code
@@ -317,7 +318,8 @@ def get_subscriptions_by_client(client_code: str):
                 p.description AS plan_description,
                 {installation_alias_expr} AS installation_no_installation,
                 i.location AS installation_location,
-                i.install_date AS installation_date
+                i.install_date AS installation_date,
+                i.mac_address AS installation_mac_address
             FROM genius.subscription s
             LEFT JOIN genius.plans p ON p.code = s.plan_code
             LEFT JOIN genius.installations i ON i.id = s.installation
@@ -534,4 +536,31 @@ def delete_subscription(correlative, client_code):
     except Exception as error:
         db.session.rollback()
         current_app.logger.exception('Error inesperado al eliminar suscripcion: %s', error)
+        return False
+
+
+def update_subscription_status(correlative: int, status: str):
+    try:
+        result = db.session.execute(
+            text(
+                """
+                UPDATE genius.subscription
+                SET status = :status
+                WHERE correlative = :correlative
+                """
+            ),
+            {
+                'correlative': correlative,
+                'status': status,
+            },
+        )
+        db.session.commit()
+        return result.rowcount > 0
+    except SQLAlchemyError as error:
+        db.session.rollback()
+        current_app.logger.exception('Error de base de datos al actualizar estado de suscripcion: %s', error)
+        return False
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.exception('Error inesperado al actualizar estado de suscripcion: %s', error)
         return False

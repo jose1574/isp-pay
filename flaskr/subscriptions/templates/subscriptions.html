@@ -46,6 +46,7 @@
           <th>Dia cobro</th>
           <th>Credito</th>
           <th>Precio aplicado</th>
+          <th>Accion</th>
         </tr>
       </thead>
       <tbody>
@@ -73,10 +74,22 @@
           <td>{{ subscription.cutoff_day if subscription.cutoff_day is not none else '-' }}</td>
           <td>{{ subscription.credit_day if subscription.credit_day is not none else '-' }}</td>
           <td>{{ subscription.price_applied if subscription.price_applied is not none else '-' }}</td>
+          <td onclick="event.stopPropagation();">
+            <div class="d-flex gap-2 flex-wrap">
+              <form method="post" action="{{ url_for('automation.deactivate_client', mac_address=subscription.installation_mac_address) }}" class="m-0 p-0">
+                  <input type="hidden" name="correlative" value="{{ subscription.correlative }}">
+                <button type="submit" class="btn btn-sm btn-danger">Desactivar</button>
+              </form>
+              <form method="post" action="{{ url_for('automation.activate_client', mac_address=subscription.installation_mac_address) }}" class="m-0 p-0">
+                  <input type="hidden" name="correlative" value="{{ subscription.correlative }}">
+                <button type="submit" class="btn btn-sm btn-success">Activar</button>
+              </form>
+            </div>
+          </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="text-center text-muted">No hay suscripciones registradas.</td>
+          <td colspan="8" class="text-center text-muted">No hay suscripciones registradas.</td>
         </tr>
         {% endfor %}
       </tbody>

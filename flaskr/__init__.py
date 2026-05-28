@@ -3,6 +3,18 @@ import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
+from .mikrotik_services import MikroTikClient
+
+# Inicializamos el cliente apuntando a tu router (usando http por defecto si no tienes SSL activo)
+mk_router = MikroTikClient(
+    host="192.168.33.1", 
+    user="josegomez", 
+    password="jose1574**", 
+    use_ssl=False  # Cambia a True si activaste www-ssl en el MikroTik
+)
+
+# Hacemos que el objeto mk_router sea accesible o lo importamos donde se necesite
+
 db = SQLAlchemy()
 def create_app(test_config=None):
     # create and configure the app
@@ -44,3 +56,6 @@ def create_app(test_config=None):
 
 
     return app
+
+
+app = create_app()
