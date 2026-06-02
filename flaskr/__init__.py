@@ -53,7 +53,6 @@ def create_app(test_config=None):
     from . import subscriptions
     from . import config
     from . import automation
-    from . import nodos
     from .automation.services.worker import suspend_overdue_subscriptions
     
     app.register_blueprint(dashboard.dashboard_bp, url_prefix='/')
@@ -62,7 +61,6 @@ def create_app(test_config=None):
     app.register_blueprint(subscriptions.subscriptions_bp, url_prefix='/subscriptions')
     app.register_blueprint(config.config_bp, url_prefix='/config')
     app.register_blueprint(automation.automation_bp, url_prefix='/automation')
-    app.register_blueprint(nodos.nodos_bp, url_prefix='/nodos')
     app.config.setdefault('AUTOMATION_REFERENCE_DATE', os.environ.get('AUTOMATION_REFERENCE_DATE'))
 
     if app.config.get('AUTO_INIT_DB', True):

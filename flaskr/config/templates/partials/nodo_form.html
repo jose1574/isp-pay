@@ -1,0 +1,149 @@
+<div id="node-form-container" class="container">
+	<p class="h3 mt-2">Gestion de Nodos</p>
+
+	<div class="card mb-3">
+		<div class="card-header d-flex justify-content-between align-items-center">
+			<span>Nodos registrados</span>
+			<button
+				type="button"
+				class="btn btn-sm btn-success"
+				hx-get="{{ url_for('config.get_nodo_form', mode='new') }}"
+				hx-target="#node-form-container"
+				hx-swap="outerHTML"
+			>Registrar Nodo</button>
+		</div>
+		<div class="card-body p-0">
+			<div class="table-responsive">
+				<table class="table table-hover mb-0">
+					<thead>
+						<tr>
+							<th>Descripcion</th>
+							<th>Zona de ventas</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for item in nodes %}
+						<tr
+							style="cursor: pointer;"
+							class="align-middle {% if node and node.correlative == item.correlative %}table-active{% endif %}"
+							hx-get="{{ url_for('config.get_nodo_form', correlative=item.correlative) }}"
+							hx-target="#node-form-container"
+							hx-swap="outerHTML"
+						>
+							<td>{{ item.description }}</td>
+							<td>{{ item.area_sales_description if item.area_sales_description else '-' }}</td>
+						</tr>
+						{% else %}
+						<tr>
+							<td colspan="2" class="text-center text-muted py-3">Aun no hay nodos registrados.</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	{% if show_form %}
+	<form action="{{ url_for('config.save_node') }}" method="post" id="node-form">
+		<input type="text" name="correlative" id="correlative-hidden" value="{{ node.correlative if node else '' }}" hidden>
+		<p class="h5">{{ 'Registrar nodo' if new_mode else 'Editar nodo' }}</p>
+
+		<div class="row mt-2">
+			<div class="col-md-8">
+				<label for="description" class="form-label">Descripcion</label>
+				<input
+					type="text"
+					id="description"
+					name="description"
+					class="form-control"
+					value="{{ node.description if node else '' }}"
+					{% if not form_enabled %}disabled{% endif %}
+					required
+				>
+			</div>
+			<div class="col-md-4">
+				<label for="area_sales_id" class="form-label">Zona de ventas</label>
+				<select name="area_sales_id" id="area_sales_id" class="form-select" {% if not form_enabled %}disabled{% endif %}>
+					<option value="">Seleccione una zona</option>
+					{% for a in area_sales %}
+					<option value="{{ a.code }}" {% if node and node.area_sales_id == a.code %}selected{% endif %}>{{ a.description }}</option>
+					{% endfor %}
+				</select>
+			</div>
+		</div>
+
+		<div class="mt-4">
+			<button type="submit" id="save-node-btn" class="btn btn-success" disabled {% if not form_enabled %}disabled{% endif %}>Guardar</button>
+			<button
+				type="button"
+				class="btn btn-primary m-1"
+				hx-get="{{ url_for('config.get_nodo_form', mode='new') }}"
+				hx-trigger="click"
+				hx-target="#node-form-container"
+				hx-swap="outerHTML"
+			>Nuevo</button>
+			<button
+				type="submit"
+				id="delete-node-btn"
+				class="btn btn-danger"
+				formaction="{{ url_for('config.remove_node') }}"
+				formmethod="post"
+				formnovalidate
+				{% if not node %}disabled{% endif %}
+			>Eliminar</button>
+		</div>
+	</form>
+	{% endif %}
+</div>
+
+<script>
+	(function () {
+		const form = document.getElementById('node-form');
+		const saveButton = document.getElementById('save-node-btn');
+
+		if (!form || !saveButton) {
+			return;
+		}
+
+		const isRequiredFieldComplete = (field) => {
+			if (field.disabled) {
+				return true;
+			}
+
+			return field.value.trim() !== '' && field.checkValidity();
+		};
+
+		const isFormComplete = () => {
+			const requiredFields = form.querySelectorAll('[required]');
+			return Array.from(requiredFields).every(isRequiredFieldComplete);
+		};
+
+		const updateSaveButtonState = () => {
+			const canSave = {{ 'true' if form_enabled else 'false' }} && isFormComplete();
+			saveButton.disabled = !canSave;
+		};
+
+		form.addEventListener('input', updateSaveButtonState);
+		form.addEventListener('change', updateSaveButtonState);
+
+		form.addEventListener('keydown', function (event) {
+			if (event.key === 'Enter' && !isFormComplete()) {
+				event.preventDefault();
+			}
+		});
+
+		form.addEventListener('submit', function (event) {
+			if (event.submitter && event.submitter.id === 'delete-node-btn') {
+				return;
+			}
+
+			if (!isFormComplete()) {
+				event.preventDefault();
+				updateSaveButtonState();
+			}
+		});
+
+		updateSaveButtonState();
+	})();
+</script>

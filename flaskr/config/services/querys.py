@@ -152,3 +152,135 @@ def delete_route(correlative):
 		current_app.logger.exception('Error inesperado al eliminar router: %s', error)
 		return False
 
+
+def get_area_sales_options():
+	return db.session.execute(
+		text(
+			"""
+			SELECT code, description
+			FROM area_sales
+			ORDER BY description
+			"""
+		)
+	).fetchall()
+
+
+def get_nodes():
+	return db.session.execute(
+		text(
+			"""
+			SELECT n.*, a.description AS area_sales_description
+			FROM genius.nodo n
+			LEFT JOIN area_sales a ON a.code = n.area_sales_id
+			ORDER BY n.correlative DESC
+			"""
+		)
+	).fetchall()
+
+
+def get_node(correlative: int):
+	return db.session.execute(
+		text(
+			"""
+			SELECT n.*, a.description AS area_sales_description
+			FROM genius.nodo n
+			LEFT JOIN area_sales a ON a.code = n.area_sales_id
+			WHERE n.correlative = :correlative
+			LIMIT 1
+			"""
+		),
+		{'correlative': correlative},
+	).first()
+
+
+def create_node(description, area_sales_id):
+	query = text(
+		"""
+		INSERT INTO genius.nodo (
+			description,
+			area_sales_id
+		) VALUES (
+			:description,
+			:area_sales_id
+		)
+		RETURNING correlative
+		"""
+	)
+
+	try:
+		result = db.session.execute(
+			query,
+			{
+				'description': description,
+				'area_sales_id': area_sales_id,
+			},
+		).fetchone()
+		db.session.commit()
+		return result.correlative if result else None
+	except SQLAlchemyError as error:
+		db.session.rollback()
+		if getattr(getattr(error, 'orig', None), 'pgcode', None) == '23505':
+			return 'duplicate_data'
+		current_app.logger.exception('Error de base de datos al crear nodo: %s', error)
+		return None
+	except Exception as error:
+		db.session.rollback()
+		current_app.logger.exception('Error inesperado al crear nodo: %s', error)
+		return None
+
+
+def update_node(correlative, description, area_sales_id):
+	query = text(
+		"""
+		UPDATE genius.nodo
+		SET
+			description = :description,
+			area_sales_id = :area_sales_id
+		WHERE correlative = :correlative
+		"""
+	)
+
+	try:
+		result = db.session.execute(
+			query,
+			{
+				'correlative': correlative,
+				'description': description,
+				'area_sales_id': area_sales_id,
+			},
+		)
+		db.session.commit()
+		return result.rowcount > 0
+	except SQLAlchemyError as error:
+		db.session.rollback()
+		if getattr(getattr(error, 'orig', None), 'pgcode', None) == '23505':
+			return 'duplicate_data'
+		current_app.logger.exception('Error de base de datos al actualizar nodo: %s', error)
+		return False
+	except Exception as error:
+		db.session.rollback()
+		current_app.logger.exception('Error inesperado al actualizar nodo: %s', error)
+		return False
+
+
+def delete_node(correlative):
+	query = text(
+		"""
+		DELETE FROM genius.nodo
+		WHERE correlative = :correlative
+		"""
+	)
+
+	try:
+		result = db.session.execute(query, {'correlative': correlative})
+		db.session.commit()
+		return result.rowcount > 0
+	except SQLAlchemyError as error:
+		db.session.rollback()
+		current_app.logger.exception('Error de base de datos al eliminar nodo: %s', error)
+		return False
+	except Exception as error:
+		db.session.rollback()
+		current_app.logger.exception('Error inesperado al eliminar nodo: %s', error)
+		return False
+
