@@ -1,0 +1,122 @@
+<div>
+	<form action="{{ url_for('config.config_nap') }}" method="get" class="card card-body mb-3">
+		<div class="row g-2 align-items-end">
+			<div class="col-md-6">
+				<label for="search" class="form-label">Buscar caja NAP</label>
+				<input
+					type="text"
+					id="search"
+					name="search"
+					class="form-control"
+					value="{{ search }}"
+					placeholder="Nombre, ubicacion o nodo"
+				>
+			</div>
+			<div class="col-md-2">
+				<label for="nap-per-page" class="form-label">Por pagina</label>
+				<select id="nap-per-page" class="form-select" name="per_page">
+					{% for option in [5, 10, 20, 50] %}
+					<option value="{{ option }}" {% if per_page == option %}selected{% endif %}>{{ option }}</option>
+					{% endfor %}
+				</select>
+			</div>
+			<div class="col-md-2">
+				<button type="submit" class="btn btn-primary w-100">Filtrar</button>
+			</div>
+			<div class="col-md-2">
+				<a href="{{ url_for('config.config_nap') }}" class="btn btn-outline-secondary w-100">Limpiar</a>
+			</div>
+		</div>
+	</form>
+
+	<div class="card mb-3">
+		<div class="card-header d-flex justify-content-between align-items-center">
+			<span>NAP registradas</span>
+			<small class="text-body-secondary">Pagina {{ page }} de {{ total_pages }}</small>
+		</div>
+		<div class="card-body p-0">
+			<div class="table-responsive">
+				<table class="table table-hover mb-0">
+					<thead>
+						<tr>
+							<th>Nombre</th>
+							<th>Nodo</th>
+							<th>Ubicacion</th>
+							<th>Puertos</th>
+							<th class="text-end">Acciones</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for item in naps %}
+						<tr class="align-middle">
+							<td>
+								<a href="{{ url_for('config.config_nap_form', correlative=item.correlative) }}" class="text-decoration-none">
+									{{ item.description }}
+								</a>
+							</td>
+							<td>{{ item.nodo_description if item.nodo_description else '-' }}</td>
+							<td>{{ item.location }}</td>
+							<td>{{ item.port_count }}</td>
+							<td class="text-end">
+								<a href="{{ url_for('config.config_nap_form', correlative=item.correlative) }}" class="btn btn-sm btn-outline-primary me-1">Editar</a>
+								<form action="{{ url_for('config.remove_nap') }}" method="post" class="d-inline">
+									<input type="hidden" name="correlative" value="{{ item.correlative }}">
+									<input type="hidden" name="page" value="{{ page }}">
+									<input type="hidden" name="per_page" value="{{ per_page }}">
+									<input type="hidden" name="search" value="{{ search }}">
+									<button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+								</form>
+							</td>
+						</tr>
+						{% else %}
+						<tr>
+							<td colspan="5" class="text-center text-muted py-3">Aun no hay NAP registradas.</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	<div class="d-flex justify-content-between align-items-center mt-3">
+		<small class="text-body-secondary">Mostrando {{ naps|length }} de {{ total_naps }} NAP</small>
+		{% if search %}
+		<small class="text-body-secondary">Filtro: "{{ search }}"</small>
+		{% endif %}
+	</div>
+
+	<nav aria-label="Paginacion de NAP" class="mt-2">
+		{% set start_page = page - 2 if page - 2 > 1 else 1 %}
+		{% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+		<ul class="pagination mb-0">
+			<li class="page-item {% if page <= 1 %}disabled{% endif %}">
+				<a class="page-link" href="{{ url_for('config.config_nap', page=1, per_page=per_page, search=search) }}">Primera</a>
+			</li>
+			<li class="page-item {% if page <= 1 %}disabled{% endif %}">
+				<a class="page-link" href="{{ url_for('config.config_nap', page=page-1, per_page=per_page, search=search) }}">Anterior</a>
+			</li>
+
+			{% if start_page > 1 %}
+			<li class="page-item disabled"><span class="page-link">...</span></li>
+			{% endif %}
+
+			{% for p in range(start_page, end_page + 1) %}
+			<li class="page-item {% if p == page %}active{% endif %}">
+				<a class="page-link" href="{{ url_for('config.config_nap', page=p, per_page=per_page, search=search) }}">{{ p }}</a>
+			</li>
+			{% endfor %}
+
+			{% if end_page < total_pages %}
+			<li class="page-item disabled"><span class="page-link">...</span></li>
+			{% endif %}
+
+			<li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+				<a class="page-link" href="{{ url_for('config.config_nap', page=page+1, per_page=per_page, search=search) }}">Siguiente</a>
+			</li>
+			<li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+				<a class="page-link" href="{{ url_for('config.config_nap', page=total_pages, per_page=per_page, search=search) }}">Ultima</a>
+			</li>
+		</ul>
+	</nav>
+</div>

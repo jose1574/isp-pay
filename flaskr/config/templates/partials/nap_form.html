@@ -1,0 +1,240 @@
+<div>
+	<div class="d-flex justify-content-between align-items-center mb-3">
+		<p class="h3 mt-2 mb-0">{{ 'Edicion de Caja NAP' if is_edit_mode else 'Registro de Caja NAP' }}</p>
+		<a href="{{ url_for('config.config_nap') }}" class="btn btn-outline-secondary">Volver al listado</a>
+	</div>
+
+	<form action="{{ url_for('config.save_nap') }}" method="post" id="nap-form">
+		<input type="hidden" name="correlative" value="{{ nap.correlative if nap else '' }}">
+		<p class="h5">{{ 'Editar caja NAP' if is_edit_mode else 'Registrar caja NAP' }}</p>
+
+		<div class="row mt-2">
+			<div class="col-md-4">
+				<label for="description" class="form-label">Nombre de la NAP</label>
+				<input
+					type="text"
+					id="description"
+					name="description"
+					class="form-control"
+					value="{{ nap.description if nap else '' }}"
+					required
+				>
+			</div>
+			<div class="col-md-4">
+				<label for="location" class="form-label">Ubicacion</label>
+				<input
+					type="text"
+					id="location"
+					name="location"
+					class="form-control"
+					value="{{ nap.location if nap else '' }}"
+					placeholder="URL o referencia de Google Maps"
+					required
+				>
+			</div>
+			<div class="col-md-4">
+				<label for="nodo_id" class="form-label">Nodo</label>
+				<select name="nodo_id" id="nodo_id" class="form-select">
+					<option value="">Sin nodo</option>
+					{% for n in nodes %}
+					<option value="{{ n.correlative }}" {% if nap and nap.nodo_id == n.correlative %}selected{% endif %}>{{ n.description }}</option>
+					{% endfor %}
+				</select>
+			</div>
+		</div>
+
+		{% if not is_edit_mode %}
+		<div class="row mt-3">
+			<div class="col-md-4">
+				<label for="port_count" class="form-label">Cantidad de puertos</label>
+				<input
+					type="number"
+					id="port_count"
+					name="port_count"
+					class="form-control"
+					min="1"
+					max="128"
+					value="{{ nap_ports|length if nap_ports else 8 }}"
+					required
+				>
+			</div>
+		</div>
+
+		<div class="mt-4">
+			<p class="h6">Puertos de la NAP</p>
+			<div id="ports-container" class="row g-3"></div>
+		</div>
+		{% else %}
+		<div class="mt-4">
+			<p class="h6">Puertos registrados</p>
+			<div class="table-responsive">
+				<table class="table table-sm table-bordered align-middle mb-0">
+					<thead>
+						<tr>
+							<th>Puerto</th>
+							<th>Trunk</th>
+							<th>NAP destino</th>
+							<th>En uso</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for port in nap_ports %}
+						<tr>
+							<td>{{ port.port_name }}</td>
+							<td>{{ 'Si' if port.port_trunk else 'No' }}</td>
+							<td>{{ port.next_nap_id if port.next_nap_id else '-' }}</td>
+							<td>{{ 'Si' if port.in_use else 'No' }}</td>
+						</tr>
+						{% else %}
+						<tr>
+							<td colspan="4" class="text-center text-muted">No hay puertos registrados.</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+			<small class="text-body-secondary d-block mt-2">La edicion de puertos se mantiene solo al crear la NAP para evitar afectar instalaciones asignadas.</small>
+		</div>
+		{% endif %}
+
+		<div class="mt-4">
+			<button type="submit" class="btn btn-success">{{ 'Actualizar NAP' if is_edit_mode else 'Guardar NAP' }}</button>
+			{% if is_edit_mode %}
+			<a href="{{ url_for('config.config_nap_form', mode='new') }}" class="btn btn-outline-primary ms-2">Crear nueva NAP</a>
+			{% endif %}
+		</div>
+	</form>
+</div>
+
+{% if not is_edit_mode %}
+<script id="nap-options-data" type="application/json">[
+	{% for item in nap_options %}
+	{"id": {{ item.correlative }}, "label": {{ (item.description ~ ' (#' ~ item.correlative ~ ')')|tojson }} }{% if not loop.last %},{% endif %}
+	{% endfor %}
+]</script>
+
+<script>
+	(function () {
+		const form = document.getElementById('nap-form');
+		if (!form) {
+			return;
+		}
+
+		const portCountInput = document.getElementById('port_count');
+		const portsContainer = document.getElementById('ports-container');
+		const napOptionsDataElement = document.getElementById('nap-options-data');
+		const napOptions = napOptionsDataElement ? JSON.parse(napOptionsDataElement.textContent || '[]') : [];
+
+		const readCurrentValues = () => {
+			const values = {};
+			portsContainer.querySelectorAll('[data-port-row]').forEach((row) => {
+				const index = row.getAttribute('data-port-row');
+				const nameInput = row.querySelector(`[name="port_name_${index}"]`);
+				const trunkInput = row.querySelector(`[name="port_trunk_${index}"]`);
+				const nextNapSelect = row.querySelector(`[name="next_nap_id_${index}"]`);
+
+				values[index] = {
+					name: nameInput ? nameInput.value : `PORT-${index}`,
+					trunk: trunkInput ? trunkInput.checked : false,
+					nextNap: nextNapSelect ? nextNapSelect.value : '',
+				};
+			});
+			return values;
+		};
+
+		const createNextNapOptionsHtml = (selectedValue) => {
+			let optionsHtml = '<option value="">Seleccione NAP destino</option>';
+			for (const nap of napOptions) {
+				const selected = String(selectedValue) === String(nap.id) ? ' selected' : '';
+				optionsHtml += `<option value="${nap.id}"${selected}>${nap.label}</option>`;
+			}
+			return optionsHtml;
+		};
+
+		const renderPorts = () => {
+			const currentValues = readCurrentValues();
+			const rawCount = Number.parseInt(portCountInput.value, 10);
+			const count = Number.isNaN(rawCount) ? 0 : Math.max(1, Math.min(128, rawCount));
+
+			if (String(count) !== portCountInput.value) {
+				portCountInput.value = String(count);
+			}
+
+			let html = '';
+			for (let index = 1; index <= count; index += 1) {
+				const saved = currentValues[index] || {};
+				const portName = saved.name || `PORT-${index}`;
+				const trunkChecked = Boolean(saved.trunk);
+				const trunkCheckedAttr = trunkChecked ? ' checked' : '';
+				const nextNapValue = saved.nextNap || '';
+				const nextNapDisabledAttr = trunkChecked ? '' : ' disabled';
+				const nextNapRequiredAttr = trunkChecked ? ' required' : '';
+
+				html += `
+					<div class="col-12" data-port-row="${index}">
+						<div class="border rounded p-3">
+							<div class="row g-3 align-items-end">
+								<div class="col-md-5">
+									<label class="form-label">Puerto ${index}</label>
+									<input type="text" class="form-control" name="port_name_${index}" value="${portName}" required>
+								</div>
+								<div class="col-md-3">
+									<div class="form-check mt-4">
+										<input class="form-check-input trunk-checkbox" type="checkbox" id="port_trunk_${index}" name="port_trunk_${index}" data-port-index="${index}"${trunkCheckedAttr}>
+										<label class="form-check-label" for="port_trunk_${index}">Puerto trunk</label>
+									</div>
+								</div>
+								<div class="col-md-4 next-nap-container" data-next-nap-index="${index}" style="${trunkChecked ? '' : 'display: none;'}">
+									<label class="form-label">NAP conectada</label>
+									<select class="form-select" name="next_nap_id_${index}"${nextNapDisabledAttr}${nextNapRequiredAttr}>
+										${createNextNapOptionsHtml(nextNapValue)}
+									</select>
+								</div>
+							</div>
+						</div>
+					</div>
+				`;
+			}
+
+			portsContainer.innerHTML = html;
+		};
+
+		const updateTrunkVisibility = (index, checked) => {
+			const wrapper = portsContainer.querySelector(`[data-next-nap-index="${index}"]`);
+			if (!wrapper) {
+				return;
+			}
+
+			const select = wrapper.querySelector('select');
+			if (!select) {
+				return;
+			}
+
+			if (checked) {
+				wrapper.style.display = '';
+				select.disabled = false;
+				select.required = true;
+			} else {
+				wrapper.style.display = 'none';
+				select.required = false;
+				select.disabled = true;
+				select.value = '';
+			}
+		};
+
+		portCountInput.addEventListener('input', renderPorts);
+
+		portsContainer.addEventListener('change', (event) => {
+			const checkbox = event.target.closest('.trunk-checkbox');
+			if (!checkbox) {
+				return;
+			}
+
+			const index = checkbox.getAttribute('data-port-index');
+			updateTrunkVisibility(index, checkbox.checked);
+		});
+
+		renderPorts();
+	})();
+</script>
+{% endif %}
