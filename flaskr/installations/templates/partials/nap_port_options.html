@@ -1,0 +1,19 @@
+<div id="nap-port-options-container" class="col">
+	<label for="nap_detail_id" class="form-label">Puerto de NAP</label>
+	<select
+		id="nap_detail_id"
+		name="nap_detail_id"
+		class="form-select"
+		{% if not nap_port_options %}disabled{% endif %}
+		required
+	>
+		<option value="" {% if not selected_nap_detail_id %}selected{% endif %} disabled>
+			{% if nap_port_options %}Seleccione un puerto{% else %}Seleccione una NAP para ver puertos{% endif %}
+		</option>
+		{% for port in nap_port_options %}
+		<option value="{{ port.correlative }}" {% if selected_nap_detail_id and selected_nap_detail_id == port.correlative %}selected{% endif %}>
+			{{ port.port_name }}{% if port.in_use and not (selected_nap_detail_id and selected_nap_detail_id == port.correlative) %} (en uso){% endif %}
+		</option>
+		{% endfor %}
+	</select>
+</div>

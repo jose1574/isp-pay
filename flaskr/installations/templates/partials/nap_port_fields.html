@@ -1,0 +1,30 @@
+<div id="nap-port-fields-container" class="row mt-3">
+	<div class="col">
+		<label for="nap_id" class="form-label">Caja NAP</label>
+		<select
+			id="nap_id"
+			name="nap_id"
+			class="form-select"
+			hx-get="{{ url_for('installations.get_nap_port_options') }}"
+			hx-trigger="change"
+			hx-target="#nap-port-options-container"
+			hx-swap="outerHTML"
+			hx-include="#nap_id"
+			{% if not nap_options %}disabled{% endif %}
+			required
+		>
+			<option value="" {% if not selected_nap_id %}selected{% endif %} disabled>
+				{% if nap_options %}Seleccione una NAP{% else %}Primero seleccione router con NAP disponibles{% endif %}
+			</option>
+			{% for nap in nap_options %}
+			<option value="{{ nap.correlative }}" {% if selected_nap_id and selected_nap_id == nap.correlative %}selected{% endif %}>
+				{{ nap.description }}{% if nap.location %} | {{ nap.location }}{% endif %}
+			</option>
+			{% endfor %}
+		</select>
+	</div>
+
+	<div id="nap-port-options-container" class="col">
+		{% include 'partials/nap_port_options.html' %}
+	</div>
+</div>

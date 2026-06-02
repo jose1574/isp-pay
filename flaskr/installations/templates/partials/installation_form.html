@@ -109,6 +109,11 @@
                     id="route_id"
                     name="route_id"
                     class="form-select"
+                    hx-get="{{ url_for('installations.get_nap_options') }}"
+                    hx-trigger="change"
+                    hx-target="#nap-port-fields-container"
+                    hx-swap="outerHTML"
+                    hx-include="#route_id"
                     {% if not form_enabled %}disabled{% endif %}
                     required
                 >
@@ -122,6 +127,10 @@
                     {% endfor %}
                 </select>
             </div>
+        </div>
+
+        <div id="nap-port-fields-container" class="row mt-3">
+            {% include 'partials/nap_port_fields.html' %}
         </div>
         <hr>
         <p class="h5">Contenido multimedia de la instalación</p>

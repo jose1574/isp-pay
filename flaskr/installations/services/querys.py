@@ -56,6 +56,23 @@ def _has_route_id_column() -> bool:
     return bool(exists)
 
 
+def _has_nap_detail_id_column() -> bool:
+    exists = db.session.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'genius'
+                  AND table_name = 'installations'
+                  AND column_name = 'nap_detail_id'
+            )
+            """
+        )
+    ).scalar_one()
+    return bool(exists)
+
+
 def _installation_from_clause() -> str:
     if _has_route_id_column():
         return "FROM genius.installations i LEFT JOIN genius.routes r ON r.correlative = i.route_id"
@@ -272,15 +289,56 @@ def create_installation(
     install_date,
     location,
     route_id,
+    nap_detail_id,
     mac_address,
     comment,
 ):
     has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
     has_route_id = _has_route_id_column()
+    has_nap_detail_id = _has_nap_detail_id_column()
 
     if has_no_installation:
-        if has_route_id:
+        if has_route_id and has_nap_detail_id:
+            query = text(
+                """
+                INSERT INTO genius.installations (
+                    client_code,
+                    no_installation,
+                    install_date,
+                    location,
+                    route_id,
+                    nap_detail_id,
+                    mac_address,
+                    comment
+                ) VALUES (
+                    :client_code,
+                    (
+                        SELECT 'contrato-' || (
+                            COALESCE(
+                                MAX(
+                                    NULLIF(
+                                        regexp_replace(lower(i.no_installation), '[^0-9]', '', 'g'),
+                                        ''
+                                    )::INTEGER
+                                ),
+                                0
+                            ) + 1
+                        )::text
+                        FROM genius.installations i
+                        WHERE i.client_code = :client_code
+                    ),
+                    :install_date,
+                    :location,
+                    :route_id,
+                    :nap_detail_id,
+                    :mac_address,
+                    :comment
+                )
+                RETURNING id
+                """
+            )
+        elif has_route_id:
             query = text(
                 """
                 INSERT INTO genius.installations (
@@ -353,7 +411,36 @@ def create_installation(
                 """
             )
     elif has_contract_number:
-        if has_route_id:
+        if has_route_id and has_nap_detail_id:
+            query = text(
+                """
+                INSERT INTO genius.installations (
+                    client_code,
+                    contract_number,
+                    install_date,
+                    location,
+                    route_id,
+                    nap_detail_id,
+                    mac_address,
+                    comment
+                ) VALUES (
+                    :client_code,
+                    (
+                        SELECT COALESCE(MAX(i.contract_number), 0) + 1
+                        FROM genius.installations i
+                        WHERE i.client_code = :client_code
+                    ),
+                    :install_date,
+                    :location,
+                    :route_id,
+                    :nap_detail_id,
+                    :mac_address,
+                    :comment
+                )
+                RETURNING id
+                """
+            )
+        elif has_route_id:
             query = text(
                 """
                 INSERT INTO genius.installations (
@@ -406,7 +493,30 @@ def create_installation(
                 """
             )
     else:
-        if has_route_id:
+        if has_route_id and has_nap_detail_id:
+            query = text(
+                """
+                INSERT INTO genius.installations (
+                    client_code,
+                    install_date,
+                    location,
+                    route_id,
+                    nap_detail_id,
+                    mac_address,
+                    comment
+                ) VALUES (
+                    :client_code,
+                    :install_date,
+                    :location,
+                    :route_id,
+                    :nap_detail_id,
+                    :mac_address,
+                    :comment
+                )
+                RETURNING id
+                """
+            )
+        elif has_route_id:
             query = text(
                 """
                 INSERT INTO genius.installations (
@@ -457,6 +567,7 @@ def create_installation(
                 "route_id": route_id,
                 "mac_address": mac_address,
                 "comment": comment,
+                "nap_detail_id": nap_detail_id,
             },
         ).fetchone()
         db.session.commit()
@@ -532,10 +643,26 @@ def update_installation(
     install_date,
     location,
     route_id,
+    nap_detail_id,
     mac_address,
     comment,
 ):
-    if _has_route_id_column():
+    if _has_route_id_column() and _has_nap_detail_id_column():
+        query = text(
+            """
+            UPDATE genius.installations
+            SET
+                client_code = :client_code,
+                install_date = :install_date,
+                location = :location,
+                route_id = :route_id,
+                nap_detail_id = :nap_detail_id,
+                mac_address = :mac_address,
+                comment = :comment
+            WHERE id = :installation_id
+            """
+        )
+    elif _has_route_id_column():
         query = text(
             """
             UPDATE genius.installations
@@ -572,6 +699,7 @@ def update_installation(
                 "install_date": install_date,
                 "location": location,
                 "route_id": route_id,
+                "nap_detail_id": nap_detail_id,
                 "mac_address": mac_address,
                 "comment": comment,
             },
@@ -595,6 +723,98 @@ def get_installation(installation_id: int):
         text(f"{_installation_select_clause()} {_installation_from_clause()} WHERE i.id = :installation_id"),
         {'installation_id': installation_id},
     ).first()
+
+
+def get_naps_by_route(route_id: int):
+    return db.session.execute(
+        text(
+            """
+            SELECT
+                n.correlative,
+                n.description,
+                n.location
+            FROM genius.nap n
+            JOIN genius.nodo no ON no.correlative = n.nodo_id
+            WHERE no.route_id = :route_id
+            ORDER BY n.description, n.correlative
+            """
+        ),
+        {'route_id': route_id},
+    ).fetchall()
+
+
+def get_nap_ports_by_nap(nap_id: int, current_port_id: int | None = None):
+    return db.session.execute(
+        text(
+            """
+            SELECT
+                nd.correlative,
+                nd.port_name,
+                nd.in_use
+            FROM genius.nap_details nd
+            WHERE nd.nap_id = :nap_id
+              AND nd.port_trunk = FALSE
+              AND (
+                  nd.in_use = FALSE
+                  OR (:current_port_id IS NOT NULL AND nd.correlative = :current_port_id)
+              )
+            ORDER BY nd.correlative ASC
+            """
+        ),
+        {
+            'nap_id': nap_id,
+            'current_port_id': current_port_id,
+        },
+    ).fetchall()
+
+
+def get_nap_selection_by_port(nap_detail_id: int):
+    return db.session.execute(
+        text(
+            """
+            SELECT
+                nd.correlative AS nap_detail_id,
+                nd.nap_id,
+                n.nodo_id,
+                no.route_id
+            FROM genius.nap_details nd
+            JOIN genius.nap n ON n.correlative = nd.nap_id
+            JOIN genius.nodo no ON no.correlative = n.nodo_id
+            WHERE nd.correlative = :nap_detail_id
+            LIMIT 1
+            """
+        ),
+        {'nap_detail_id': nap_detail_id},
+    ).first()
+
+
+def is_valid_nap_port_for_route(route_id: int, nap_id: int, nap_detail_id: int, installation_id: int | None = None):
+    row = db.session.execute(
+        text(
+            """
+            SELECT nd.correlative
+            FROM genius.nap_details nd
+            JOIN genius.nap n ON n.correlative = nd.nap_id
+            JOIN genius.nodo no ON no.correlative = n.nodo_id
+            LEFT JOIN genius.installations i
+              ON i.nap_detail_id = nd.correlative
+             AND (:installation_id IS NULL OR i.id <> :installation_id)
+            WHERE nd.correlative = :nap_detail_id
+              AND nd.nap_id = :nap_id
+              AND no.route_id = :route_id
+              AND nd.port_trunk = FALSE
+              AND i.id IS NULL
+            LIMIT 1
+            """
+        ),
+        {
+            'route_id': route_id,
+            'nap_id': nap_id,
+            'nap_detail_id': nap_detail_id,
+            'installation_id': installation_id,
+        },
+    ).first()
+    return bool(row)
 
 
 def upsert_installation_media(

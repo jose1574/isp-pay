@@ -10,6 +10,10 @@ from .services.querys import (
     get_installations,
     get_installations_by_client,
     get_installations_count,
+    get_naps_by_route,
+    get_nap_ports_by_nap,
+    get_nap_selection_by_port,
+    is_valid_nap_port_for_route,
     create_installation,
     create_installation_media,
     get_latest_installation_by_client,
@@ -25,11 +29,28 @@ def _build_installation_context(client_code, installation_id=None, new_mode=Fals
     installations = get_installations_by_client(client_code) if client_code else []
     routes = get_routes()
     installation = None
+    selected_route_id = None
+    selected_nap_id = None
+    selected_nap_detail_id = None
 
     if installation_id:
         installation = get_installation(installation_id)
         if installation and client_code and installation.client_code != client_code:
             installation = None
+
+    if installation:
+        selected_route_id = installation.route_id
+        selected_nap_detail_id = installation.nap_detail_id if hasattr(installation, 'nap_detail_id') else None
+
+        if selected_nap_detail_id:
+            nap_selection = get_nap_selection_by_port(selected_nap_detail_id)
+            if nap_selection:
+                selected_nap_id = nap_selection.nap_id
+                if not selected_route_id:
+                    selected_route_id = nap_selection.route_id
+
+    nap_options = get_naps_by_route(selected_route_id) if selected_route_id else []
+    nap_port_options = get_nap_ports_by_nap(selected_nap_id, current_port_id=selected_nap_detail_id) if selected_nap_id else []
 
     if not new_mode and installation is None and installation_id is None:
         # Flujo nuevo: tras buscar cliente mostramos primero la lista, no el formulario.
@@ -54,6 +75,11 @@ def _build_installation_context(client_code, installation_id=None, new_mode=Fals
     return {
         'installations': installations,
         'routes': routes,
+        'nap_options': nap_options,
+        'nap_port_options': nap_port_options,
+        'selected_route_id': selected_route_id,
+        'selected_nap_id': selected_nap_id,
+        'selected_nap_detail_id': selected_nap_detail_id,
         'installation': installation,
         'media_urls': media_urls,
         'show_form': bool(new_mode or installation),
@@ -117,6 +143,11 @@ def installation():
         form_enabled=True,
         installations=context['installations'],
         routes=context['routes'],
+        nap_options=context['nap_options'],
+        nap_port_options=context['nap_port_options'],
+        selected_route_id=context['selected_route_id'],
+        selected_nap_id=context['selected_nap_id'],
+        selected_nap_detail_id=context['selected_nap_detail_id'],
         installation=context['installation'],
         media_urls=context['media_urls'],
         show_form=context['show_form'],
@@ -139,6 +170,11 @@ def search_client():
             form_enabled=True,
             installations=[],
             routes=get_routes(),
+            nap_options=[],
+            nap_port_options=[],
+            selected_route_id=None,
+            selected_nap_id=None,
+            selected_nap_detail_id=None,
             installation=None,
             media_urls={},
             show_form=False,
@@ -159,6 +195,11 @@ def search_client():
                 form_enabled=True,
                 installations=context['installations'],
                 routes=context['routes'],
+                nap_options=context['nap_options'],
+                nap_port_options=context['nap_port_options'],
+                selected_route_id=context['selected_route_id'],
+                selected_nap_id=context['selected_nap_id'],
+                selected_nap_detail_id=context['selected_nap_detail_id'],
                 installation=context['installation'],
                 media_urls=context['media_urls'],
                 show_form=context['show_form'],
@@ -171,6 +212,11 @@ def search_client():
             form_enabled=True,
             installations=context['installations'],
             routes=context['routes'],
+            nap_options=context['nap_options'],
+            nap_port_options=context['nap_port_options'],
+            selected_route_id=context['selected_route_id'],
+            selected_nap_id=context['selected_nap_id'],
+            selected_nap_detail_id=context['selected_nap_detail_id'],
             installation=context['installation'],
             media_urls=context['media_urls'],
             show_form=context['show_form'],
@@ -191,6 +237,11 @@ def search_client():
         form_enabled=True,
         installations=[],
         routes=get_routes(),
+            nap_options=[],
+            nap_port_options=[],
+            selected_route_id=None,
+            selected_nap_id=None,
+            selected_nap_detail_id=None,
         installation=None,
         media_urls={},
         show_form=False,
@@ -211,6 +262,11 @@ def get_installation_form():
             form_enabled=True,
             installations=[],
             routes=get_routes(),
+            nap_options=[],
+            nap_port_options=[],
+            selected_route_id=None,
+            selected_nap_id=None,
+            selected_nap_detail_id=None,
             installation=None,
             media_urls={},
             show_form=False,
@@ -231,10 +287,87 @@ def get_installation_form():
         form_enabled=True,
         installations=context['installations'],
         routes=context['routes'],
+        nap_options=context['nap_options'],
+        nap_port_options=context['nap_port_options'],
+        selected_route_id=context['selected_route_id'],
+        selected_nap_id=context['selected_nap_id'],
+        selected_nap_detail_id=context['selected_nap_detail_id'],
         installation=context['installation'],
         media_urls=context['media_urls'],
         show_form=context['show_form'],
         new_mode=context['new_mode'],
+    )
+
+
+@installations_bp.route('/get_nap_options', methods=['GET'])
+def get_nap_options():
+    raw_route_id = (request.args.get('route_id') or '').strip()
+    raw_selected_nap_id = (request.args.get('selected_nap_id') or '').strip()
+    raw_selected_nap_detail_id = (request.args.get('selected_nap_detail_id') or '').strip()
+
+    route_id = None
+    selected_nap_id = None
+    selected_nap_detail_id = None
+
+    if raw_route_id:
+        try:
+            route_id = int(raw_route_id)
+        except ValueError:
+            route_id = None
+
+    if raw_selected_nap_id:
+        try:
+            selected_nap_id = int(raw_selected_nap_id)
+        except ValueError:
+            selected_nap_id = None
+
+    if raw_selected_nap_detail_id:
+        try:
+            selected_nap_detail_id = int(raw_selected_nap_detail_id)
+        except ValueError:
+            selected_nap_detail_id = None
+
+    nap_options = get_naps_by_route(route_id) if route_id else []
+    if selected_nap_id and not any(item.correlative == selected_nap_id for item in nap_options):
+        selected_nap_id = None
+
+    nap_port_options = get_nap_ports_by_nap(selected_nap_id, current_port_id=selected_nap_detail_id) if selected_nap_id else []
+
+    return render_template(
+        'partials/nap_port_fields.html',
+        nap_options=nap_options,
+        nap_port_options=nap_port_options,
+        selected_nap_id=selected_nap_id,
+        selected_nap_detail_id=selected_nap_detail_id,
+    )
+
+
+@installations_bp.route('/get_nap_port_options', methods=['GET'])
+def get_nap_port_options():
+    raw_nap_id = (request.args.get('nap_id') or '').strip()
+    raw_selected_nap_detail_id = (request.args.get('selected_nap_detail_id') or '').strip()
+
+    nap_id = None
+    selected_nap_detail_id = None
+
+    if raw_nap_id:
+        try:
+            nap_id = int(raw_nap_id)
+        except ValueError:
+            nap_id = None
+
+    if raw_selected_nap_detail_id:
+        try:
+            selected_nap_detail_id = int(raw_selected_nap_detail_id)
+        except ValueError:
+            selected_nap_detail_id = None
+
+    nap_port_options = get_nap_ports_by_nap(nap_id, current_port_id=selected_nap_detail_id) if nap_id else []
+
+    return render_template(
+        'partials/nap_port_options.html',
+        nap_port_options=nap_port_options,
+        selected_nap_detail_id=selected_nap_detail_id,
     )
 
 
@@ -245,6 +378,8 @@ def save_installation():
     install_date = request.form.get('install_date')
     location = request.form.get('location')
     raw_route_id = (request.form.get('route_id') or '').strip()
+    raw_nap_id = (request.form.get('nap_id') or '').strip()
+    raw_nap_detail_id = (request.form.get('nap_detail_id') or '').strip()
     mac_address = request.form.get('mac_address')
     comment = request.form.get('comment')
 
@@ -275,6 +410,17 @@ def save_installation():
         flash('Seleccione un router valido.', 'warning')
         return redirect(url_for('installations.installation', code=client_code))
 
+    if not raw_nap_id or not raw_nap_detail_id:
+        flash('Seleccione una caja NAP y un puerto de NAP para la instalacion.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code))
+
+    try:
+        nap_id = int(raw_nap_id)
+        nap_detail_id = int(raw_nap_detail_id)
+    except ValueError:
+        flash('La seleccion de NAP o puerto es invalida.', 'warning')
+        return redirect(url_for('installations.installation', code=client_code))
+
     installation_id = None
     if raw_installation_id:
         try:
@@ -285,12 +431,22 @@ def save_installation():
     was_update = bool(installation_id)
 
     if was_update:
+        if not is_valid_nap_port_for_route(
+            route_id=route_id,
+            nap_id=nap_id,
+            nap_detail_id=nap_detail_id,
+            installation_id=installation_id,
+        ):
+            flash('La relacion Router -> NAP -> Puerto no es valida o el puerto ya esta en uso.', 'warning')
+            return redirect(url_for('installations.installation', code=client_code, installation_id=installation_id))
+
         update_result = update_installation(
             installation_id=installation_id,
             client_code=client_code,
             install_date=install_date,
             location=location,
             route_id=route_id,
+            nap_detail_id=nap_detail_id,
             mac_address=mac_address,
             comment=comment,
         )
@@ -303,11 +459,21 @@ def save_installation():
             flash('Error al actualizar la instalacion.', 'danger')
             return redirect(url_for('installations.installation', code=client_code))
     else:
+        if not is_valid_nap_port_for_route(
+            route_id=route_id,
+            nap_id=nap_id,
+            nap_detail_id=nap_detail_id,
+            installation_id=None,
+        ):
+            flash('La relacion Router -> NAP -> Puerto no es valida o el puerto ya esta en uso.', 'warning')
+            return redirect(url_for('installations.installation', code=client_code))
+
         installation_id = create_installation(
             client_code=client_code,
             install_date=install_date,
             location=location,
             route_id=route_id,
+            nap_detail_id=nap_detail_id,
             mac_address=mac_address,
             comment=comment,
         )
