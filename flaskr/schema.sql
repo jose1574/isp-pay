@@ -1251,29 +1251,6 @@ BEGIN
 		FROM information_schema.columns
 		WHERE table_schema = 'genius'
 		  AND table_name = 'nap_details'
-		  AND column_name = 'port_trunk'
-	)
-	AND NOT EXISTS (
-		SELECT 1
-		FROM pg_constraint con
-		JOIN pg_class rel ON rel.oid = con.conrelid
-		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
-		WHERE con.conname = 'chk_nap_details_trunk_next_nap'
-		  AND rel.relname = 'nap_details'
-		  AND nsp.nspname = 'genius'
-	) THEN
-		EXECUTE 'ALTER TABLE genius.nap_details ADD CONSTRAINT chk_nap_details_trunk_next_nap CHECK (NOT port_trunk OR next_nap_id IS NOT NULL)';
-	END IF;
-END
-$$;
-
-DO $$
-BEGIN
-	IF EXISTS (
-		SELECT 1
-		FROM information_schema.columns
-		WHERE table_schema = 'genius'
-		  AND table_name = 'nap_details'
 		  AND column_name = 'in_use'
 	)
 	AND NOT EXISTS (
@@ -1386,5 +1363,240 @@ BEGIN
 	) THEN
 		EXECUTE 'ALTER TABLE genius.nap_port_history ADD CONSTRAINT fk_nap_port_history_nap_detail FOREIGN KEY (nap_detail_id) REFERENCES genius.nap_details(correlative) ON UPDATE CASCADE ON DELETE CASCADE';
 	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'chk_nap_details_trunk_next_nap'
+		  AND rel.relname = 'nap_details'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details DROP CONSTRAINT chk_nap_details_trunk_next_nap';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	-- Si el puerto no es trunk, no debe apuntar a una NAP siguiente.
+	EXECUTE 'UPDATE genius.nap_details SET next_nap_id = NULL WHERE NOT port_trunk';
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'chk_nap_details_trunk_next_nap_exact'
+		  AND rel.relname = 'nap_details'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details ADD CONSTRAINT chk_nap_details_trunk_next_nap_exact CHECK ((port_trunk AND next_nap_id IS NOT NULL) OR (NOT port_trunk AND next_nap_id IS NULL))';
+	END IF;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION genius.validate_installation_nap_port()
+RETURNS TRIGGER AS $$
+DECLARE
+	v_port_trunk BOOLEAN;
+BEGIN
+	IF NEW.nap_detail_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT nd.port_trunk
+	INTO v_port_trunk
+	FROM genius.nap_details nd
+	WHERE nd.correlative = NEW.nap_detail_id
+	FOR UPDATE;
+
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'El puerto NAP % no existe.', NEW.nap_detail_id;
+	END IF;
+
+	IF v_port_trunk THEN
+		RAISE EXCEPTION 'El puerto NAP % es trunk y no puede asignarse a una instalacion.', NEW.nap_detail_id;
+	END IF;
+
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION genius.sync_nap_port_usage_from_installations()
+RETURNS TRIGGER AS $$
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		IF NEW.nap_detail_id IS NOT NULL THEN
+			UPDATE genius.nap_details
+			SET in_use = TRUE
+			WHERE correlative = NEW.nap_detail_id;
+		END IF;
+		RETURN NEW;
+	END IF;
+
+	IF TG_OP = 'UPDATE' THEN
+		IF NEW.nap_detail_id IS NOT NULL THEN
+			UPDATE genius.nap_details
+			SET in_use = TRUE
+			WHERE correlative = NEW.nap_detail_id;
+		END IF;
+
+		IF OLD.nap_detail_id IS NOT NULL AND (NEW.nap_detail_id IS NULL OR OLD.nap_detail_id <> NEW.nap_detail_id) THEN
+			UPDATE genius.nap_details nd
+			SET in_use = CASE
+				WHEN nd.port_trunk THEN TRUE
+				WHEN EXISTS (
+					SELECT 1
+					FROM genius.installations i
+					WHERE i.nap_detail_id = OLD.nap_detail_id
+				) THEN TRUE
+				ELSE FALSE
+			END
+			WHERE nd.correlative = OLD.nap_detail_id;
+		END IF;
+
+		RETURN NEW;
+	END IF;
+
+	IF TG_OP = 'DELETE' THEN
+		IF OLD.nap_detail_id IS NOT NULL THEN
+			UPDATE genius.nap_details nd
+			SET in_use = CASE
+				WHEN nd.port_trunk THEN TRUE
+				WHEN EXISTS (
+					SELECT 1
+					FROM genius.installations i
+					WHERE i.nap_detail_id = OLD.nap_detail_id
+				) THEN TRUE
+				ELSE FALSE
+			END
+			WHERE nd.correlative = OLD.nap_detail_id;
+		END IF;
+		RETURN OLD;
+	END IF;
+
+	RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION genius.enforce_nap_details_state()
+RETURNS TRIGGER AS $$
+DECLARE
+	v_has_installation BOOLEAN;
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		v_has_installation := FALSE;
+	ELSE
+		SELECT EXISTS (
+			SELECT 1
+			FROM genius.installations i
+			WHERE i.nap_detail_id = OLD.correlative
+		)
+		INTO v_has_installation;
+	END IF;
+
+	IF NEW.port_trunk AND v_has_installation THEN
+		RAISE EXCEPTION 'El puerto NAP % no puede marcarse como trunk porque ya esta asignado a una instalacion.', COALESCE(OLD.correlative, NEW.correlative);
+	END IF;
+
+	IF NEW.port_trunk THEN
+		NEW.in_use := TRUE;
+	ELSE
+		IF v_has_installation THEN
+			NEW.in_use := TRUE;
+		ELSE
+			NEW.in_use := FALSE;
+		END IF;
+	END IF;
+
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM pg_trigger t
+		JOIN pg_class c ON c.oid = t.tgrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE t.tgname = 'trg_validate_installation_nap_port'
+		  AND c.relname = 'installations'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'DROP TRIGGER trg_validate_installation_nap_port ON genius.installations';
+	END IF;
+END
+$$;
+
+CREATE TRIGGER trg_validate_installation_nap_port
+BEFORE INSERT OR UPDATE OF nap_detail_id ON genius.installations
+FOR EACH ROW
+EXECUTE PROCEDURE genius.validate_installation_nap_port();
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM pg_trigger t
+		JOIN pg_class c ON c.oid = t.tgrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE t.tgname = 'trg_sync_nap_port_usage_installations'
+		  AND c.relname = 'installations'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'DROP TRIGGER trg_sync_nap_port_usage_installations ON genius.installations';
+	END IF;
+END
+$$;
+
+CREATE TRIGGER trg_sync_nap_port_usage_installations
+AFTER INSERT OR UPDATE OF nap_detail_id OR DELETE ON genius.installations
+FOR EACH ROW
+EXECUTE PROCEDURE genius.sync_nap_port_usage_from_installations();
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM pg_trigger t
+		JOIN pg_class c ON c.oid = t.tgrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE t.tgname = 'trg_enforce_nap_details_state'
+		  AND c.relname = 'nap_details'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'DROP TRIGGER trg_enforce_nap_details_state ON genius.nap_details';
+	END IF;
+END
+$$;
+
+CREATE TRIGGER trg_enforce_nap_details_state
+BEFORE INSERT OR UPDATE OF port_trunk, next_nap_id, in_use ON genius.nap_details
+FOR EACH ROW
+EXECUTE PROCEDURE genius.enforce_nap_details_state();
+
+DO $$
+BEGIN
+	UPDATE genius.nap_details nd
+	SET in_use = CASE
+		WHEN nd.port_trunk THEN TRUE
+		WHEN EXISTS (
+			SELECT 1
+			FROM genius.installations i
+			WHERE i.nap_detail_id = nd.correlative
+		) THEN TRUE
+		ELSE FALSE
+	END;
 END
 $$;
