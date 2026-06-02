@@ -1,24 +1,32 @@
 <!doctype html>
 <html lang="es" data-bs-theme="dark">
-  <title>{% block title %}{% endblock %} - Flaskr</title>
+  <title>{% block title %}{% endblock %} - ISP PAY</title>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
       rel="stylesheet"
     />
-    <!-- Agrega tu propio CSS aquí -->
     <link
-      href="{{ url_for('static', filename='static/style.css') }}"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="{{ url_for('static', filename='styles.css') }}"
       rel="stylesheet"
     />
   </head>
   <body>
-    <nav class="navbar navbar-expand-lg bg-body-tertiary">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="{{ url_for('clients.clients')}}"
-          >Clientes</a
-        >
+    <nav class="navbar navbar-expand-lg app-navbar sticky-top">
+      <div class="container-fluid app-navbar-container">
+        <a class="navbar-brand d-flex align-items-center app-brand" href="{{ url_for('dashboard.dashboard') }}">
+          <span class="app-brand-badge">
+            <img src="{{ url_for('static', filename='icons/logo.png') }}" alt="Inicio" width="32" height="32" class="rounded">
+          </span>
+          <span class="app-brand-text">ISP PAY</span>
+        </a>
         <button
           class="navbar-toggler"
           type="button"
@@ -31,24 +39,34 @@
           <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item">
-              <a class="nav-link active" aria-current="page" href="{{ url_for('installations.installations') }}">Instalaciones</a>
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0 nav-pill-list">
+            <li class="nav-item nav-pill-item">
+              <a class="nav-link nav-pill-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}" href="{{ url_for('dashboard.dashboard') }}">Dashboard</a>
             </li>
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+
+            <li class="nav-item nav-pill-item">
+              <a class="nav-link nav-pill-link {% if request.endpoint and request.endpoint.startswith('clients.') %}active{% endif %}" href="{{ url_for('clients.clients') }}">Clientes</a>
+            </li>
+
+            <li class="nav-item nav-pill-item">
+              <a class="nav-link nav-pill-link {% if request.endpoint and request.endpoint.startswith('installations.') %}active{% endif %}" href="{{ url_for('installations.installations') }}">Instalaciones</a>
+            </li>
+
+            <li class="nav-item dropdown nav-pill-item">
+              <a class="nav-link dropdown-toggle nav-pill-link {% if request.endpoint and request.endpoint.startswith('subscriptions.') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 Servicios
               </a>
-              <ul class="dropdown-menu">
+              <ul class="dropdown-menu app-dropdown-menu">
                 <li><a class="dropdown-item" href="{{ url_for('subscriptions.subscriptions') }}">Suscripciones</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('subscriptions.plans') }}">Planes</a></li>
               </ul>
             </li>
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+
+            <li class="nav-item dropdown nav-pill-item">
+              <a class="nav-link dropdown-toggle nav-pill-link {% if request.endpoint and request.endpoint.startswith('config.') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 Configuración
               </a>
-              <ul class="dropdown-menu">
+              <ul class="dropdown-menu app-dropdown-menu">
                 <li><a class="dropdown-item" href="{{ url_for('config.config_routers') }}">Routers</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('config.config_nodos') }}">Nodos</a></li>
                 <li><a class="dropdown-item" href="{{ url_for('config.config_nap') }}">Cajas NAP</a></li>

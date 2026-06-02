@@ -1,12 +1,17 @@
 {% extends "base.html" %}
 
+{% block header %}
+<p class="h1 pb-4 page-title">Automatización</p>
+{% endblock %}
+
 {% block content %}
-<h1>Automation Page</h1>
-<p>Welcome to the automation page!</p>
-<p>Voy a mostrar aqui la lista de clientes conectados en mi router.</p>
-<p>
-{{ info }}
-</p>
+<div class="container">
+	<div class="card p-4">
+		<p class="h4 mb-3">Panel de Automatización</p>
+		<p class="text-body-secondary mb-1">Aquí se visualiza la ejecución de tareas automáticas sobre clientes y suscripciones.</p>
+		<p class="mb-0">{{ info }}</p>
+	</div>
+</div>
 
 
 {% endblock %}
