@@ -173,6 +173,7 @@ def remove_route():
 
 def _build_node_context(correlative=None, new_mode=False):
     nodes = get_nodes()
+    routes = get_routes()
     node = None
 
     if correlative:
@@ -180,6 +181,7 @@ def _build_node_context(correlative=None, new_mode=False):
 
     return {
         'nodes': nodes,
+        'routes': routes,
         'node': node,
         'area_sales': get_area_sales_options(),
         'show_form': bool(new_mode or node),
@@ -224,10 +226,17 @@ def get_nodo_form():
 def save_node():
     raw_correlative = (request.form.get('correlative') or '').strip()
     description = (request.form.get('description') or '').strip()
+    raw_route_id = (request.form.get('route_id') or '').strip()
     area_sales_id = (request.form.get('area_sales_id') or '').strip() or None
 
-    if not description:
-        flash('La descripcion del nodo es obligatoria.', 'warning')
+    if not description or not raw_route_id:
+        flash('La descripcion y el router del nodo son obligatorios.', 'warning')
+        return redirect(url_for('config.config_nodos'))
+
+    try:
+        route_id = int(raw_route_id)
+    except ValueError:
+        flash('El router seleccionado es invalido.', 'warning')
         return redirect(url_for('config.config_nodos'))
 
     if raw_correlative:
@@ -240,6 +249,7 @@ def save_node():
         result = update_node(
             correlative=correlative,
             description=description,
+            route_id=route_id,
             area_sales_id=area_sales_id,
         )
 
@@ -256,6 +266,7 @@ def save_node():
 
     result = create_node(
         description=description,
+        route_id=route_id,
         area_sales_id=area_sales_id,
     )
 

@@ -18,6 +18,7 @@
 					<thead>
 						<tr>
 							<th>Descripcion</th>
+							<th>Router</th>
 							<th>Zona de ventas</th>
 						</tr>
 					</thead>
@@ -31,11 +32,12 @@
 							hx-swap="outerHTML"
 						>
 							<td>{{ item.description }}</td>
+							<td>{{ item.route_identity if item.route_identity else item.route_ip }}</td>
 							<td>{{ item.area_sales_description if item.area_sales_description else '-' }}</td>
 						</tr>
 						{% else %}
 						<tr>
-							<td colspan="2" class="text-center text-muted py-3">Aun no hay nodos registrados.</td>
+							<td colspan="3" class="text-center text-muted py-3">Aun no hay nodos registrados.</td>
 						</tr>
 						{% endfor %}
 					</tbody>
@@ -50,7 +52,7 @@
 		<p class="h5">{{ 'Registrar nodo' if new_mode else 'Editar nodo' }}</p>
 
 		<div class="row mt-2">
-			<div class="col-md-8">
+			<div class="col-md-6">
 				<label for="description" class="form-label">Descripcion</label>
 				<input
 					type="text"
@@ -62,9 +64,18 @@
 					required
 				>
 			</div>
-			<div class="col-md-4">
+			<div class="col-md-3">
+				<label for="route_id" class="form-label">Router</label>
+				<select name="route_id" id="route_id" class="form-select" {% if not form_enabled %}disabled{% endif %} required>
+					<option value="" {% if not node %}selected{% endif %} disabled>Seleccione un router</option>
+					{% for r in routes %}
+					<option value="{{ r.correlative }}" {% if node and node.route_id == r.correlative %}selected{% endif %}>{{ r.identity if r.identity else r.ip_address }}</option>
+					{% endfor %}
+				</select>
+			</div>
+			<div class="col-md-3">
 				<label for="area_sales_id" class="form-label">Zona de ventas</label>
-				<select name="area_sales_id" id="area_sales_id" class="form-select" {% if not form_enabled %}disabled{% endif %}>
+				<select name="area_sales_id" id="area_sales_id" class="form-select" {% if not form_enabled %}disabled{% endif %} required>
 					<option value="">Seleccione una zona</option>
 					{% for a in area_sales %}
 					<option value="{{ a.code }}" {% if node and node.area_sales_id == a.code %}selected{% endif %}>{{ a.description }}</option>

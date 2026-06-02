@@ -943,8 +943,85 @@ EXECUTE PROCEDURE genius.set_updated_at();
 CREATE TABLE IF NOT EXISTS genius.nodo (
 	correlative BIGSERIAL PRIMARY KEY,
 	description VARCHAR(150) NOT NULL,
-	area_sales_id VARCHAR(30)
+	route_id BIGINT NOT NULL,
+	area_sales_id VARCHAR(30) NOT NULL,
+	CONSTRAINT fk_nodo_route
+		FOREIGN KEY (route_id)
+		REFERENCES genius.routes(correlative)
+		ON UPDATE CASCADE
+		ON DELETE RESTRICT
 );
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nodo'
+		  AND column_name = 'route_id'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nodo ADD COLUMN route_id BIGINT';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nodo'
+		  AND column_name = 'route_id'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'fk_nodo_route'
+		  AND rel.relname = 'nodo'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nodo ADD CONSTRAINT fk_nodo_route FOREIGN KEY (route_id) REFERENCES genius.routes(correlative) ON UPDATE CASCADE ON DELETE RESTRICT';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nodo_route_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nodo_route_id ON genius.nodo(route_id)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nodo'
+		  AND column_name = 'route_id'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM genius.nodo
+		WHERE route_id IS NULL
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nodo ALTER COLUMN route_id SET NOT NULL';
+	END IF;
+END
+$$;
 
 DO $$
 BEGIN

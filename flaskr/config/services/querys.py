@@ -169,8 +169,13 @@ def get_nodes():
 	return db.session.execute(
 		text(
 			"""
-			SELECT n.*, a.description AS area_sales_description
+			SELECT
+				n.*,
+				a.description AS area_sales_description,
+				r.identity AS route_identity,
+				r.ip_address AS route_ip
 			FROM genius.nodo n
+			JOIN genius.routes r ON r.correlative = n.route_id
 			LEFT JOIN area_sales a ON a.code = n.area_sales_id
 			ORDER BY n.correlative DESC
 			"""
@@ -182,8 +187,13 @@ def get_node(correlative: int):
 	return db.session.execute(
 		text(
 			"""
-			SELECT n.*, a.description AS area_sales_description
+			SELECT
+				n.*,
+				a.description AS area_sales_description,
+				r.identity AS route_identity,
+				r.ip_address AS route_ip
 			FROM genius.nodo n
+			JOIN genius.routes r ON r.correlative = n.route_id
 			LEFT JOIN area_sales a ON a.code = n.area_sales_id
 			WHERE n.correlative = :correlative
 			LIMIT 1
@@ -193,14 +203,16 @@ def get_node(correlative: int):
 	).first()
 
 
-def create_node(description, area_sales_id):
+def create_node(description, route_id, area_sales_id):
 	query = text(
 		"""
 		INSERT INTO genius.nodo (
 			description,
+			route_id,
 			area_sales_id
 		) VALUES (
 			:description,
+			:route_id,
 			:area_sales_id
 		)
 		RETURNING correlative
@@ -212,6 +224,7 @@ def create_node(description, area_sales_id):
 			query,
 			{
 				'description': description,
+				'route_id': route_id,
 				'area_sales_id': area_sales_id,
 			},
 		).fetchone()
@@ -229,12 +242,13 @@ def create_node(description, area_sales_id):
 		return None
 
 
-def update_node(correlative, description, area_sales_id):
+def update_node(correlative, description, route_id, area_sales_id):
 	query = text(
 		"""
 		UPDATE genius.nodo
 		SET
 			description = :description,
+			route_id = :route_id,
 			area_sales_id = :area_sales_id
 		WHERE correlative = :correlative
 		"""
@@ -246,6 +260,7 @@ def update_node(correlative, description, area_sales_id):
 			{
 				'correlative': correlative,
 				'description': description,
+				'route_id': route_id,
 				'area_sales_id': area_sales_id,
 			},
 		)
