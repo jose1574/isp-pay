@@ -47,13 +47,15 @@ def create_app(test_config=None):
     from . import db
     db.init_app(app)
 
+    from . import dashboard 
     from . import clients
     from . import installations
     from . import subscriptions
     from . import config
     from . import automation
     from .automation.services.worker import suspend_overdue_subscriptions
-
+    
+    app.register_blueprint(dashboard.dashboard_bp, url_prefix='/')
     app.register_blueprint(clients.clients_bp, url_prefix='/clients')
     app.register_blueprint(installations.installations_bp, url_prefix='/installations')
     app.register_blueprint(subscriptions.subscriptions_bp, url_prefix='/subscriptions')
