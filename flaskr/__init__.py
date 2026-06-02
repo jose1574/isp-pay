@@ -18,12 +18,16 @@ mk_router = MikroTikClient(
 
 db = SQLAlchemy()
 def create_app(test_config=None):
+    from .db_bootstrap import bootstrap_database
+
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev")
     app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://postgres:root@localhost:5432/cadm_geniusnet"
 
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config.setdefault('AUTO_INIT_DB', os.environ.get('AUTO_INIT_DB', 'true').lower() in ('1', 'true', 'yes'))
+    app.config.setdefault('DB_MIGRATIONS_DIR', os.environ.get('DB_MIGRATIONS_DIR', os.path.join(os.path.dirname(__file__), 'migrations', 'sql')))
 
 
     if test_config is None:
@@ -57,6 +61,35 @@ def create_app(test_config=None):
     app.register_blueprint(automation.automation_bp, url_prefix='/automation')
 
     app.config.setdefault('AUTOMATION_REFERENCE_DATE', os.environ.get('AUTOMATION_REFERENCE_DATE'))
+
+    if app.config.get('AUTO_INIT_DB', True):
+        with app.app_context():
+            migration_result = bootstrap_database(db)
+            app.logger.info(
+                'Inicializacion DB completada | migraciones_aplicadas=%s | migraciones_ya_aplicadas=%s',
+                migration_result['applied'],
+                migration_result['already_applied'],
+            )
+
+    @app.cli.command('init-db')
+    def init_db_command():
+        result = bootstrap_database(db)
+        click.echo(
+            'DB inicializada | migraciones_aplicadas={} | migraciones_ya_aplicadas={}'.format(
+                result['applied'],
+                result['already_applied'],
+            )
+        )
+
+    @app.cli.command('migrate-db')
+    def migrate_db_command():
+        result = bootstrap_database(db)
+        click.echo(
+            'Migracion DB completada | migraciones_aplicadas={} | migraciones_ya_aplicadas={}'.format(
+                result['applied'],
+                result['already_applied'],
+            )
+        )
 
     @app.cli.command('check-overdue-subscriptions')
     def check_overdue_subscriptions_command():

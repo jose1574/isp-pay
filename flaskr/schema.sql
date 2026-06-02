@@ -313,6 +313,64 @@ BEGIN
 		FROM information_schema.columns
 		WHERE table_schema = 'genius'
 		  AND table_name = 'installations'
+		  AND column_name = 'nap_detail_id'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.installations ADD COLUMN nap_detail_id BIGINT';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.tables
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+	)
+	AND EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'installations'
+		  AND column_name = 'nap_detail_id'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'fk_installations_nap_detail'
+		  AND rel.relname = 'installations'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.installations ADD CONSTRAINT fk_installations_nap_detail FOREIGN KEY (nap_detail_id) REFERENCES genius.nap_details(correlative) ON UPDATE CASCADE ON DELETE SET NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'uq_installations_nap_detail_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE UNIQUE INDEX uq_installations_nap_detail_id ON genius.installations(nap_detail_id) WHERE nap_detail_id IS NOT NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'installations'
 		  AND column_name = 'no_installation'
 	) THEN
 		EXECUTE 'ALTER TABLE genius.installations ADD COLUMN no_installation VARCHAR(40)';
@@ -585,6 +643,71 @@ BEFORE UPDATE ON genius.installations
 FOR EACH ROW
 EXECUTE PROCEDURE genius.set_updated_at();
 
+
+-- Historial experimental de asignacion y liberacion de puertos NAP
+CREATE TABLE IF NOT EXISTS genius.nap_port_history (
+	correlative BIGSERIAL PRIMARY KEY,
+	nap_detail_id BIGINT NOT NULL,
+	installation_id BIGINT,
+	event_type VARCHAR(30) NOT NULL,
+	previous_in_use BOOLEAN,
+	new_in_use BOOLEAN NOT NULL,
+	notes TEXT,
+	event_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+	CONSTRAINT fk_nap_port_history_installation
+		FOREIGN KEY (installation_id)
+		REFERENCES genius.installations(id)
+		ON UPDATE CASCADE
+		ON DELETE SET NULL,
+	CONSTRAINT chk_nap_port_history_event_type
+		CHECK (event_type IN ('asignacion', 'liberacion', 'reasignacion'))
+);
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_port_history_nap_detail_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_port_history_nap_detail_id ON genius.nap_port_history(nap_detail_id)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_port_history_installation_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_port_history_installation_id ON genius.nap_port_history(installation_id)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_port_history_event_at'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_port_history_event_at ON genius.nap_port_history(event_at)';
+	END IF;
+END
+$$;
+
 DO $$
 BEGIN
 	IF EXISTS (
@@ -814,3 +937,454 @@ CREATE TRIGGER trg_set_updated_at_routes
 BEFORE UPDATE ON genius.routes
 FOR EACH ROW
 EXECUTE PROCEDURE genius.set_updated_at();
+
+
+-- Tabla principal de nodos de red
+CREATE TABLE IF NOT EXISTS genius.nodo (
+	correlative BIGSERIAL PRIMARY KEY,
+	description VARCHAR(150) NOT NULL,
+	area_sales_id VARCHAR(30)
+);
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.tables
+		WHERE table_schema = 'public'
+		  AND table_name = 'area_sales'
+	)
+	AND EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND table_name = 'area_sales'
+		  AND column_name = 'code'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'fk_nodo_area_sales'
+		  AND rel.relname = 'nodo'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nodo ADD CONSTRAINT fk_nodo_area_sales FOREIGN KEY (area_sales_id) REFERENCES public.area_sales(code) ON UPDATE CASCADE ON DELETE SET NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nodo_area_sales_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nodo_area_sales_id ON genius.nodo(area_sales_id)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nodo_description'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nodo_description ON genius.nodo(description)';
+	END IF;
+END
+$$;
+
+
+-- Tabla principal de cajas NAP
+CREATE TABLE IF NOT EXISTS genius.nap (
+	correlative BIGSERIAL PRIMARY KEY,
+	nodo_id BIGINT,
+	description VARCHAR(150) NOT NULL,
+	location TEXT NOT NULL,
+	created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+	CONSTRAINT fk_nap_nodo
+		FOREIGN KEY (nodo_id)
+		REFERENCES genius.nodo(correlative)
+		ON UPDATE CASCADE
+		ON DELETE SET NULL
+);
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_description'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_description ON genius.nap(description)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap'
+		  AND column_name = 'nodo_id'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap ADD COLUMN nodo_id BIGINT';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap'
+		  AND column_name = 'nodo_id'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'fk_nap_nodo'
+		  AND rel.relname = 'nap'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap ADD CONSTRAINT fk_nap_nodo FOREIGN KEY (nodo_id) REFERENCES genius.nodo(correlative) ON UPDATE CASCADE ON DELETE SET NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_nodo_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_nodo_id ON genius.nap(nodo_id)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap'
+		  AND column_name = 'created_at'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap ADD COLUMN created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()';
+		EXECUTE 'UPDATE genius.nap SET created_at = NOW() WHERE created_at IS NULL';
+	END IF;
+END
+$$;
+
+
+-- Tabla de puertos y asignaciones de cada NAP
+CREATE TABLE IF NOT EXISTS genius.nap_details (
+	correlative BIGSERIAL PRIMARY KEY,
+	nap_id BIGINT NOT NULL,
+	port_name VARCHAR(80) NOT NULL,
+	in_use BOOLEAN NOT NULL DEFAULT FALSE,
+	port_trunk BOOLEAN NOT NULL DEFAULT FALSE,
+	next_nap_id BIGINT,
+	CONSTRAINT fk_nap_details_nap
+		FOREIGN KEY (nap_id)
+		REFERENCES genius.nap(correlative)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE,
+	CONSTRAINT fk_nap_details_next_nap
+		FOREIGN KEY (next_nap_id)
+		REFERENCES genius.nap(correlative)
+		ON UPDATE CASCADE
+		ON DELETE SET NULL,
+	CONSTRAINT chk_nap_details_trunk_next_nap
+		CHECK (NOT port_trunk OR next_nap_id IS NOT NULL)
+);
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+		  AND column_name = 'in_use'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details ADD COLUMN in_use BOOLEAN NOT NULL DEFAULT FALSE';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+		  AND column_name = 'client_id'
+	) THEN
+		IF EXISTS (
+			SELECT 1
+			FROM pg_constraint con
+			JOIN pg_class rel ON rel.oid = con.conrelid
+			JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+			WHERE con.conname = 'fk_nap_details_client'
+			  AND rel.relname = 'nap_details'
+			  AND nsp.nspname = 'genius'
+		) THEN
+			EXECUTE 'ALTER TABLE genius.nap_details DROP CONSTRAINT fk_nap_details_client';
+		END IF;
+
+		IF EXISTS (
+			SELECT 1
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE c.relkind = 'i'
+			  AND c.relname = 'idx_nap_details_client_id'
+			  AND n.nspname = 'genius'
+		) THEN
+			EXECUTE 'DROP INDEX genius.idx_nap_details_client_id';
+		END IF;
+
+		EXECUTE 'ALTER TABLE genius.nap_details DROP COLUMN client_id';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'chk_nap_details_trunk_client'
+		  AND rel.relname = 'nap_details'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details DROP CONSTRAINT chk_nap_details_trunk_client';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+		  AND column_name = 'in_use'
+	) THEN
+		EXECUTE 'UPDATE genius.nap_details SET in_use = FALSE WHERE in_use IS NULL';
+		EXECUTE 'ALTER TABLE genius.nap_details ALTER COLUMN in_use SET DEFAULT FALSE';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+		  AND column_name = 'next_nap_id'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details ADD COLUMN next_nap_id BIGINT';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+		  AND column_name = 'next_nap_id'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'fk_nap_details_next_nap'
+		  AND rel.relname = 'nap_details'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details ADD CONSTRAINT fk_nap_details_next_nap FOREIGN KEY (next_nap_id) REFERENCES genius.nap(correlative) ON UPDATE CASCADE ON DELETE SET NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+		  AND column_name = 'port_trunk'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'chk_nap_details_trunk_next_nap'
+		  AND rel.relname = 'nap_details'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details ADD CONSTRAINT chk_nap_details_trunk_next_nap CHECK (NOT port_trunk OR next_nap_id IS NOT NULL)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+		  AND column_name = 'in_use'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM genius.nap_details
+		WHERE in_use IS NULL
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_details ALTER COLUMN in_use SET NOT NULL';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'uq_nap_details_nap_port_name'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE UNIQUE INDEX uq_nap_details_nap_port_name ON genius.nap_details(nap_id, port_name)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_details_nap_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_details_nap_id ON genius.nap_details(nap_id)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_details_in_use'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_details_in_use ON genius.nap_details(in_use)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_details_next_nap_id'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_details_next_nap_id ON genius.nap_details(next_nap_id)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'i'
+		  AND c.relname = 'idx_nap_details_port_trunk'
+		  AND n.nspname = 'genius'
+	) THEN
+		EXECUTE 'CREATE INDEX idx_nap_details_port_trunk ON genius.nap_details(port_trunk)';
+	END IF;
+END
+$$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.tables
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_port_history'
+	)
+	AND EXISTS (
+		SELECT 1
+		FROM information_schema.tables
+		WHERE table_schema = 'genius'
+		  AND table_name = 'nap_details'
+	)
+	AND NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		WHERE con.conname = 'fk_nap_port_history_nap_detail'
+		  AND rel.relname = 'nap_port_history'
+		  AND nsp.nspname = 'genius'
+	) THEN
+		EXECUTE 'ALTER TABLE genius.nap_port_history ADD CONSTRAINT fk_nap_port_history_nap_detail FOREIGN KEY (nap_detail_id) REFERENCES genius.nap_details(correlative) ON UPDATE CASCADE ON DELETE CASCADE';
+	END IF;
+END
+$$;
