@@ -581,6 +581,49 @@ def get_overdue_active_subscriptions(reference_date=None):
         date_expression = ':reference_date'
         params['reference_date'] = reference_date
 
+    current_cutoff_expr = f"""
+        (
+            date_trunc('month', {date_expression})::date
+            + (
+                LEAST(
+                    EXTRACT(DAY FROM s.cutoff_day)::int,
+                    EXTRACT(
+                        DAY FROM (
+                            date_trunc('month', {date_expression})
+                            + INTERVAL '1 month - 1 day'
+                        )
+                    )::int
+                ) - 1
+            ) * INTERVAL '1 day'
+        )::date
+    """
+
+    previous_cutoff_expr = f"""
+        (
+            date_trunc('month', ({date_expression}::date - INTERVAL '1 month'))::date
+            + (
+                LEAST(
+                    EXTRACT(DAY FROM s.cutoff_day)::int,
+                    EXTRACT(
+                        DAY FROM (
+                            date_trunc('month', ({date_expression}::date - INTERVAL '1 month'))
+                            + INTERVAL '1 month - 1 day'
+                        )
+                    )::int
+                ) - 1
+            ) * INTERVAL '1 day'
+        )::date
+    """
+
+    billing_period_cutoff_expr = f"""
+        (
+            CASE
+                WHEN {date_expression}::date >= ({current_cutoff_expr}) THEN ({current_cutoff_expr})
+                ELSE ({previous_cutoff_expr})
+            END
+        )
+    """
+
     return db.session.execute(
         text(
             f"""
@@ -591,6 +634,7 @@ def get_overdue_active_subscriptions(reference_date=None):
                 s.status,
                 s.cutoff_day,
                 s.credit_day,
+                {billing_period_cutoff_expr} AS billing_period_cutoff,
                 c.description AS client_name,
                 c.address AS client_address,
                 c.phone AS client_phone,
@@ -606,7 +650,8 @@ def get_overdue_active_subscriptions(reference_date=None):
             WHERE s.status = 'activo'
               AND s.cutoff_day IS NOT NULL
               AND s.credit_day IS NOT NULL
-              AND {date_expression} > (s.cutoff_day + s.credit_day)
+              AND {date_expression}::date >= s.cutoff_day
+              AND {date_expression}::date > ({billing_period_cutoff_expr} + s.credit_day)
             ORDER BY s.cutoff_day ASC, s.correlative ASC
             """
         )
@@ -616,7 +661,9 @@ def get_overdue_active_subscriptions(reference_date=None):
 
 
 def create_receivable_for_overdue_subscription(subscription, reference_date=None):
-    emission_date = reference_date or date.today()
+    emission_date = getattr(subscription, 'billing_period_cutoff', None)
+    if emission_date is None:
+        emission_date = reference_date or date.today()
     credit_days = int(getattr(subscription, 'credit_day', 0) or 0)
     expiration_date = emission_date + timedelta(days=credit_days)
 
@@ -650,8 +697,32 @@ def create_receivable_for_overdue_subscription(subscription, reference_date=None
             text("SELECT code FROM public.coin ORDER BY code LIMIT 1")
         ).scalar() or 'USD'
 
-    description = f"Suscripcion vencida #{subscription.correlative}"
-    comments = f"Generada automaticamente por vencimiento de suscripcion #{subscription.correlative}"
+    month_names = {
+        1: 'enero',
+        2: 'febrero',
+        3: 'marzo',
+        4: 'abril',
+        5: 'mayo',
+        6: 'junio',
+        7: 'julio',
+        8: 'agosto',
+        9: 'septiembre',
+        10: 'octubre',
+        11: 'noviembre',
+        12: 'diciembre',
+    }
+    period_month = month_names.get(emission_date.month, str(emission_date.month))
+    period_label = f'{period_month} {emission_date.year}'
+
+    service_label = 'Servicio prepago'
+    if plan_description:
+        service_label = f'{service_label} {plan_description}'
+
+    description = f"{service_label} {period_label} - suscripcion #{subscription.correlative}"
+    comments = (
+        f"Generada automaticamente por vencimiento de suscripcion #{subscription.correlative}. "
+        f"Mes facturado: {period_label}."
+    )
 
     already_exists = db.session.execute(
         text(
