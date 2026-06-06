@@ -146,10 +146,11 @@ def create_app(test_config=None):
     def check_overdue_subscriptions_command():
         result = suspend_overdue_subscriptions()
         click.echo(
-            'Revision completada | fecha={} | procesadas={} | suspendidas={} | errores={}'.format(
+            'Revision completada | fecha={} | procesadas={} | suspendidas={} | cx_cobrar_creadas={} | errores={}'.format(
                 result['reference_date'] or 'CURRENT_DATE',
                 result['processed'],
                 result['suspended'],
+                result.get('receivables_created', 0),
                 len(result['errors']),
             )
         )

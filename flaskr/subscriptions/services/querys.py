@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from flask import current_app
@@ -589,9 +591,17 @@ def get_overdue_active_subscriptions(reference_date=None):
                 s.status,
                 s.cutoff_day,
                 s.credit_day,
+                c.description AS client_name,
+                c.address AS client_address,
+                c.phone AS client_phone,
+                p.description AS plan_description,
+                COALESCE(s.price_applied, p.price, 0) AS receivable_amount,
+                p.coin AS plan_coin,
                 i.mac_address AS installation_mac_address,
                 i.route_id
             FROM genius.subscription s
+            LEFT JOIN clients c ON c.code = s.client_code
+            LEFT JOIN genius.plans p ON p.code = s.plan_code
             LEFT JOIN genius.installations i ON i.id = s.installation
             WHERE s.status = 'activo'
               AND s.cutoff_day IS NOT NULL
@@ -603,3 +613,179 @@ def get_overdue_active_subscriptions(reference_date=None):
         ,
         params,
     ).fetchall()
+
+
+def create_receivable_for_overdue_subscription(subscription, reference_date=None):
+    emission_date = reference_date or date.today()
+    credit_days = int(getattr(subscription, 'credit_day', 0) or 0)
+    expiration_date = emission_date + timedelta(days=credit_days)
+
+    client_code = str(getattr(subscription, 'client_code', '') or '').strip()
+    if not client_code:
+        return False, 'No se pudo crear cuenta por cobrar: client_code vacio.'
+
+    client_name = str(getattr(subscription, 'client_name', '') or '').strip() or client_code
+    client_address = str(getattr(subscription, 'client_address', '') or '').strip()
+    client_phone = str(getattr(subscription, 'client_phone', '') or '').strip()
+    plan_description = str(getattr(subscription, 'plan_description', '') or '').strip()
+
+    raw_amount = getattr(subscription, 'receivable_amount', 0) or 0
+    try:
+        amount = float(raw_amount)
+    except (TypeError, ValueError):
+        return False, (
+            f'No se pudo crear cuenta por cobrar para suscripcion {subscription.correlative}: '
+            f'monto invalido ({raw_amount}).'
+        )
+
+    if amount <= 0:
+        return False, (
+            f'No se pudo crear cuenta por cobrar para suscripcion {subscription.correlative}: '
+            'el monto calculado es menor o igual a cero.'
+        )
+
+    coin_code = str(getattr(subscription, 'plan_coin', '') or '').strip()
+    if not coin_code:
+        coin_code = db.session.execute(
+            text("SELECT code FROM public.coin ORDER BY code LIMIT 1")
+        ).scalar() or 'USD'
+
+    description = f"Suscripcion vencida #{subscription.correlative}"
+    comments = f"Generada automaticamente por vencimiento de suscripcion #{subscription.correlative}"
+
+    already_exists = db.session.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM receivable
+                WHERE operation_type = 'RECEIVABLE'
+                  AND client_code = :client_code
+                  AND description = :description
+                  AND emission_date = :emission_date
+            )
+            """
+        ),
+        {
+            'client_code': client_code,
+            'description': description,
+            'emission_date': emission_date,
+        },
+    ).scalar_one()
+
+    if already_exists:
+        return True, None
+
+    try:
+        receivable_correlative = db.session.execute(
+            text(
+                """
+                SELECT set_receivable(
+                    :p_correlative,
+                    :p_operation_type,
+                    :p_document_no,
+                    :p_control_no,
+                    :p_emission_date,
+                    :p_client_code,
+                    :p_client_name,
+                    :p_client_id,
+                    :p_client_address,
+                    :p_client_phone,
+                    :p_client_name_fiscal,
+                    :p_credit_days,
+                    :p_expiration_date,
+                    :p_description,
+                    :p_comments,
+                    :p_seller,
+                    :p_user_code,
+                    :p_station,
+                    :p_total_net,
+                    :p_total_tax,
+                    :p_total,
+                    :p_credit,
+                    :p_debit,
+                    :p_balance,
+                    :p_fiscal_impresion,
+                    :p_fiscal_printer_serial,
+                    :p_fiscal_printer_date,
+                    :p_fiscal_printer_document,
+                    :p_fiscal_printer_z,
+                    :p_coin_code,
+                    :p_indexing_factor,
+                    :p_indexing,
+                    :p_indexing_coin,
+                    :p_indexing_correlative_origin,
+                    :p_indexing_module_origin,
+                    :p_total_exempt,
+                    :p_base_igtf,
+                    :p_percent_igtf,
+                    :p_igtf
+                ) AS receivable_correlative
+                """
+            ),
+            {
+                'p_correlative': 0,
+                'p_operation_type': 'RECEIVABLE',
+                'p_document_no': '',
+                'p_control_no': '',
+                'p_emission_date': emission_date,
+                'p_client_code': client_code,
+                'p_client_name': client_name,
+                'p_client_id': client_code,
+                'p_client_address': client_address,
+                'p_client_phone': client_phone,
+                'p_client_name_fiscal': 0,
+                'p_credit_days': credit_days,
+                'p_expiration_date': expiration_date,
+                'p_description': description,
+                'p_comments': comments,
+                'p_seller': '00',
+                'p_user_code': '00',
+                'p_station': '00',
+                'p_total_net': amount,
+                'p_total_tax': 0.0,
+                'p_total': amount,
+                'p_credit': 0.0,
+                'p_debit': amount,
+                'p_balance': amount,
+                'p_fiscal_impresion': False,
+                'p_fiscal_printer_serial': '',
+                'p_fiscal_printer_date': None,
+                'p_fiscal_printer_document': '',
+                'p_fiscal_printer_z': '',
+                'p_coin_code': coin_code,
+                'p_indexing_factor': 1.0,
+                'p_indexing': False,
+                'p_indexing_coin': coin_code,
+                'p_indexing_correlative_origin': 0,
+                'p_indexing_module_origin': 'AUTOMATION',
+                'p_total_exempt': 0.0,
+                'p_base_igtf': 0.0,
+                'p_percent_igtf': 0.0,
+                'p_igtf': 0.0,
+            },
+        ).scalar_one()
+        db.session.commit()
+        return True, receivable_correlative
+    except SQLAlchemyError as error:
+        db.session.rollback()
+        current_app.logger.exception(
+            'Error de base de datos al crear cuenta por cobrar para suscripcion %s: %s',
+            getattr(subscription, 'correlative', 'N/A'),
+            error,
+        )
+        return False, (
+            f'Error de base de datos al crear cuenta por cobrar para suscripcion '
+            f'{getattr(subscription, "correlative", "N/A")}: {error}'
+        )
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.exception(
+            'Error inesperado al crear cuenta por cobrar para suscripcion %s: %s',
+            getattr(subscription, 'correlative', 'N/A'),
+            error,
+        )
+        return False, (
+            f'Error inesperado al crear cuenta por cobrar para suscripcion '
+            f'{getattr(subscription, "correlative", "N/A")}: {error}'
+        )

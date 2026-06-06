@@ -3,6 +3,7 @@ from flask import current_app
 
 from flaskr import conn_mikrotik
 from flaskr.subscriptions.services.querys import (
+	create_receivable_for_overdue_subscription,
 	get_overdue_active_subscriptions,
 	update_subscription_status,
 )
@@ -73,10 +74,22 @@ def suspend_overdue_subscriptions():
 	overdue_subscriptions = get_overdue_active_subscriptions(reference_date=reference_date)
 	processed = 0
 	suspended = 0
+	receivables_created = 0
 	errors: list[str] = []
 
 	for subscription in overdue_subscriptions:
 		processed += 1
+
+		receivable_ok, receivable_result = create_receivable_for_overdue_subscription(
+			subscription,
+			reference_date=reference_date,
+		)
+		if not receivable_ok:
+			errors.append(str(receivable_result))
+		else:
+			# Si receivable_result es None, ya existia una cuenta por cobrar para esta emision.
+			if receivable_result is not None:
+				receivables_created += 1
 
 		mac_address = getattr(subscription, 'installation_mac_address', None)
 		if not mac_address:
@@ -106,6 +119,7 @@ def suspend_overdue_subscriptions():
 	return {
 		'processed': processed,
 		'suspended': suspended,
+		'receivables_created': receivables_created,
 		'errors': errors,
 		'reference_date': reference_date,
 	}
