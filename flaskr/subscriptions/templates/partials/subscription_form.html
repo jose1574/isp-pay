@@ -31,6 +31,18 @@
 	</div>
 
 	{% if code %}
+	{% if not installations %}
+	<div class="alert alert-warning d-flex justify-content-between align-items-center gap-3 flex-wrap" role="alert">
+		<div>
+			<strong>Este cliente no tiene instalaciones registradas.</strong>
+			<div>Primero debes registrar una instalaci&oacute;n para poder crear una suscripci&oacute;n.</div>
+		</div>
+		<a href="{{ url_for('installations.installation', code=code) }}" class="btn btn-success">
+			Registrar instalaci&oacute;n
+		</a>
+	</div>
+	{% endif %}
+
 	<div class="card mb-3">
 		<div class="card-header d-flex justify-content-between align-items-center">
 			<span>Suscripciones registradas del cliente</span>
@@ -79,7 +91,7 @@
 	</div>
 	{% endif %}
 
-	{% if show_form and new_mode and not available_installations %}
+	{% if show_form and new_mode and installations and not available_installations %}
 	<div class="alert alert-warning" role="alert">
 		Todas las instalaciones de este cliente ya tienen una suscripcion asociada.
 	</div>
