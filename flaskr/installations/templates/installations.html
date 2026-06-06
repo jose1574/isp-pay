@@ -35,10 +35,12 @@
     <thead>
       <tr>
         <th>Cedula Cliente</th>
+        <th>Nombre Cliente</th>
         <th>Contrato</th>
         <th>Fecha</th>
         <th>Ubicacion</th>
         <th>Direccion MAC</th>
+        
       </tr>
     </thead>
     <tbody>
@@ -49,6 +51,7 @@
         class="align-middle"
       >
         <td>{{ installation.client_code }}</td>
+        <td>{{ installation.client_name if installation.client_name else '-' }}</td>
         <td>{{ installation.no_installation_display if installation.no_installation_display else 'contrato-' }}</td>
         <td>{{ installation.install_date }}</td>
         <td>{{ installation.location }}</td>
@@ -56,7 +59,7 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="5" class="text-center text-muted">No hay instalaciones registradas.</td>
+        <td colspan="6" class="text-center text-muted">No hay instalaciones registradas.</td>
       </tr>
       {% endfor %}
     </tbody>

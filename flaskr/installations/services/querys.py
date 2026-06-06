@@ -75,20 +75,20 @@ def _has_nap_detail_id_column() -> bool:
 
 def _installation_from_clause() -> str:
     if _has_route_id_column():
-        return "FROM genius.installations i LEFT JOIN genius.routes r ON r.correlative = i.route_id"
+        return "FROM genius.installations i LEFT JOIN genius.routes r ON r.correlative = i.route_id LEFT JOIN clients c ON c.code = i.client_code"
 
-    return "FROM genius.installations i"
+    return "FROM genius.installations i LEFT JOIN clients c ON c.code = i.client_code"
 
 
 def _installation_select_clause() -> str:
     if _has_route_id_column():
         return (
-            "SELECT i.*, r.correlative AS route_correlative, r.identity AS route_identity, "
+            "SELECT i.*, c.description AS client_name, r.correlative AS route_correlative, r.identity AS route_identity, "
             "r.ip_address AS route_ip_address, COALESCE(r.identity, r.ip_address, 'Router #' || r.correlative::text) AS route_display "
         )
 
     return (
-        "SELECT i.*, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, "
+        "SELECT i.*, c.description AS client_name, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, "
         "NULL::VARCHAR AS route_identity, NULL::VARCHAR AS route_ip_address, NULL::VARCHAR AS route_display "
     )
 
@@ -178,9 +178,10 @@ def get_installations_by_client(client_code: str):
         if has_route_id:
             query = text(
                 """
-                SELECT i.*, r.correlative AS route_correlative, r.identity AS route_identity, r.ip_address AS route_ip_address, COALESCE(r.identity, r.ip_address, 'Router #' || r.correlative::text) AS route_display, i.no_installation AS no_installation_display
+                SELECT i.*, c.description AS client_name, r.correlative AS route_correlative, r.identity AS route_identity, r.ip_address AS route_ip_address, COALESCE(r.identity, r.ip_address, 'Router #' || r.correlative::text) AS route_display, i.no_installation AS no_installation_display
                 FROM genius.installations i
                 LEFT JOIN genius.routes r ON r.correlative = i.route_id
+                LEFT JOIN clients c ON c.code = i.client_code
                 WHERE i.client_code = :client_code
                 ORDER BY COALESCE(NULLIF(regexp_replace(lower(i.no_installation), '[^0-9]', '', 'g'), '')::INTEGER, 0) ASC, i.id ASC
                 """
@@ -188,8 +189,9 @@ def get_installations_by_client(client_code: str):
         else:
             query = text(
                 """
-                SELECT i.*, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, NULL::VARCHAR AS route_identity, NULL::VARCHAR AS route_ip_address, NULL::VARCHAR AS route_display, i.no_installation AS no_installation_display
+                SELECT i.*, c.description AS client_name, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, NULL::VARCHAR AS route_identity, NULL::VARCHAR AS route_ip_address, NULL::VARCHAR AS route_display, i.no_installation AS no_installation_display
                 FROM genius.installations i
+                LEFT JOIN clients c ON c.code = i.client_code
                 WHERE i.client_code = :client_code
                 ORDER BY COALESCE(NULLIF(regexp_replace(lower(i.no_installation), '[^0-9]', '', 'g'), '')::INTEGER, 0) ASC, i.id ASC
                 """
@@ -198,9 +200,10 @@ def get_installations_by_client(client_code: str):
         if has_route_id:
             query = text(
                 """
-                SELECT i.*, r.correlative AS route_correlative, r.identity AS route_identity, r.ip_address AS route_ip_address, COALESCE(r.identity, r.ip_address, 'Router #' || r.correlative::text) AS route_display, ('contrato-' || i.contract_number::text) AS no_installation_display
+                SELECT i.*, c.description AS client_name, r.correlative AS route_correlative, r.identity AS route_identity, r.ip_address AS route_ip_address, COALESCE(r.identity, r.ip_address, 'Router #' || r.correlative::text) AS route_display, ('contrato-' || i.contract_number::text) AS no_installation_display
                 FROM genius.installations i
                 LEFT JOIN genius.routes r ON r.correlative = i.route_id
+                LEFT JOIN clients c ON c.code = i.client_code
                 WHERE i.client_code = :client_code
                 ORDER BY i.contract_number ASC, i.id ASC
                 """
@@ -208,8 +211,9 @@ def get_installations_by_client(client_code: str):
         else:
             query = text(
                 """
-                SELECT i.*, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, NULL::VARCHAR AS route_identity, NULL::VARCHAR AS route_ip_address, NULL::VARCHAR AS route_display, ('contrato-' || i.contract_number::text) AS no_installation_display
+                SELECT i.*, c.description AS client_name, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, NULL::VARCHAR AS route_identity, NULL::VARCHAR AS route_ip_address, NULL::VARCHAR AS route_display, ('contrato-' || i.contract_number::text) AS no_installation_display
                 FROM genius.installations i
+                LEFT JOIN clients c ON c.code = i.client_code
                 WHERE i.client_code = :client_code
                 ORDER BY i.contract_number ASC, i.id ASC
                 """
@@ -218,9 +222,10 @@ def get_installations_by_client(client_code: str):
         if has_route_id:
             query = text(
                 """
-                SELECT i.*, r.correlative AS route_correlative, r.identity AS route_identity, r.ip_address AS route_ip_address, COALESCE(r.identity, r.ip_address, 'Router #' || r.correlative::text) AS route_display, NULL::VARCHAR AS no_installation_display
+                SELECT i.*, c.description AS client_name, r.correlative AS route_correlative, r.identity AS route_identity, r.ip_address AS route_ip_address, COALESCE(r.identity, r.ip_address, 'Router #' || r.correlative::text) AS route_display, NULL::VARCHAR AS no_installation_display
                 FROM genius.installations i
                 LEFT JOIN genius.routes r ON r.correlative = i.route_id
+                LEFT JOIN clients c ON c.code = i.client_code
                 WHERE i.client_code = :client_code
                 ORDER BY i.id ASC
                 """
@@ -228,8 +233,9 @@ def get_installations_by_client(client_code: str):
         else:
             query = text(
                 """
-                SELECT i.*, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, NULL::VARCHAR AS route_identity, NULL::VARCHAR AS route_ip_address, NULL::VARCHAR AS route_display, NULL::VARCHAR AS no_installation_display
+                SELECT i.*, c.description AS client_name, NULL::BIGINT AS route_id, NULL::BIGINT AS route_correlative, NULL::VARCHAR AS route_identity, NULL::VARCHAR AS route_ip_address, NULL::VARCHAR AS route_display, NULL::VARCHAR AS no_installation_display
                 FROM genius.installations i
+                LEFT JOIN clients c ON c.code = i.client_code
                 WHERE i.client_code = :client_code
                 ORDER BY i.id ASC
                 """

@@ -40,6 +40,7 @@
       <thead>
         <tr>
           <th>Cedula Cliente</th>
+          <th>Nombre Cliente</th>
           <th>Instalacion</th>
           <th>Plan</th>
           <th>Estado</th>
@@ -57,6 +58,7 @@
           class="align-middle"
         >
           <td>{{ subscription.client_code if subscription.client_code is defined else '-' }}</td>
+          <td>{{ subscription.client_name if subscription.client_name else '-' }}</td>
           <td>
             {% if subscription.installation is not none %}
               {{ subscription.installation_no_installation if subscription.installation_no_installation else 'contrato-?' }} | #{{ subscription.installation }}
@@ -94,7 +96,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="text-center text-muted">No hay suscripciones registradas.</td>
+          <td colspan="9" class="text-center text-muted">No hay suscripciones registradas.</td>
         </tr>
         {% endfor %}
       </tbody>

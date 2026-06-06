@@ -25,7 +25,7 @@ from .services.querys import (
 )
 
 
-def _build_installation_context(client_code, installation_id=None, new_mode=False):
+def _build_installation_context(client_code, client=None, installation_id=None, new_mode=False):
     installations = get_installations_by_client(client_code) if client_code else []
     routes = get_routes()
     installation = None
@@ -73,6 +73,7 @@ def _build_installation_context(client_code, installation_id=None, new_mode=Fals
             media_urls[row.media_type] = f"data:{mime_type};base64,{b64_data}"
 
     return {
+        'client_name': client.description if client and getattr(client, 'description', None) else '',
         'installations': installations,
         'routes': routes,
         'nap_options': nap_options,
@@ -135,11 +136,12 @@ def installation():
             installation_id = None
 
     client = get_client(code) if code else None
-    context = _build_installation_context(client.code if client else code, installation_id=installation_id, new_mode=new_mode)
+    context = _build_installation_context(client.code if client else code, client=client, installation_id=installation_id, new_mode=new_mode)
 
     return render_template(
         'installation.html',
         code=client.code if client else code,
+        client_name=context['client_name'],
         form_enabled=True,
         installations=context['installations'],
         routes=context['routes'],
@@ -167,6 +169,7 @@ def search_client():
         return render_template(
             'partials/installation_form.html',
             code='',
+            client_name='',
             form_enabled=True,
             installations=[],
             routes=get_routes(),
@@ -186,12 +189,13 @@ def search_client():
         client = get_client(normalized_code)
 
     if client:
-        context = _build_installation_context(client.code)
+        context = _build_installation_context(client.code, client=client)
 
         if request.headers.get('HX-Request') == 'true':
             return render_template(
                 'partials/installation_form.html',
                 code=client.code,
+                client_name=context['client_name'],
                 form_enabled=True,
                 installations=context['installations'],
                 routes=context['routes'],
@@ -209,6 +213,7 @@ def search_client():
         return render_template(
             'installation.html',
             code=client.code,
+            client_name=context['client_name'],
             form_enabled=True,
             installations=context['installations'],
             routes=context['routes'],
@@ -234,6 +239,7 @@ def search_client():
     return render_template(
         'installation.html',
         code=code,
+        client_name='',
         form_enabled=True,
         installations=[],
         routes=get_routes(),
@@ -259,6 +265,7 @@ def get_installation_form():
         return render_template(
             'partials/installation_form.html',
             code='',
+            client_name='',
             form_enabled=True,
             installations=[],
             routes=get_routes(),
@@ -280,10 +287,12 @@ def get_installation_form():
         except ValueError:
             installation_id = None
 
-    context = _build_installation_context(code, installation_id=installation_id, new_mode=new_mode)
+    client = get_client(code)
+    context = _build_installation_context(code, client=client, installation_id=installation_id, new_mode=new_mode)
     return render_template(
         'partials/installation_form.html',
         code=code,
+        client_name=context['client_name'],
         form_enabled=True,
         installations=context['installations'],
         routes=context['routes'],

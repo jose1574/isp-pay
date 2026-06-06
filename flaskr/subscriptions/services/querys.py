@@ -255,6 +255,7 @@ def get_subscriptions(page: int | None = None, per_page: int | None = None, sear
     base_query = f"""
         SELECT
             s.*,
+            c.description AS client_name,
             p.description AS plan_description,
             i.location AS installation_location,
             i.install_date AS installation_date,
@@ -262,6 +263,7 @@ def get_subscriptions(page: int | None = None, per_page: int | None = None, sear
             i.route_id,
             {installation_alias_expr} AS installation_no_installation
         FROM genius.subscription s
+        LEFT JOIN clients c ON c.code = s.client_code
         LEFT JOIN genius.plans p ON p.code = s.plan_code
         LEFT JOIN genius.installations i ON i.id = s.installation
         {where_clause}
@@ -316,12 +318,14 @@ def get_subscriptions_by_client(client_code: str):
             f"""
             SELECT
                 s.*,
+                c.description AS client_name,
                 p.description AS plan_description,
                 {installation_alias_expr} AS installation_no_installation,
                 i.location AS installation_location,
                 i.install_date AS installation_date,
                 i.mac_address AS installation_mac_address
             FROM genius.subscription s
+            LEFT JOIN clients c ON c.code = s.client_code
             LEFT JOIN genius.plans p ON p.code = s.plan_code
             LEFT JOIN genius.installations i ON i.id = s.installation
             WHERE s.client_code = :client_code

@@ -1,4 +1,4 @@
-<div id="installation-form-container">
+<div id="installation-form-container" class="container">
 
     <p class="h3 mt-2">Buscar Cliente</p>
     <div >
@@ -29,6 +29,13 @@
             >Buscar</button>
         </div>
     </div>
+
+    {% if client_name %}
+    <div class="mb-3 p-3 panel-card">
+        <div class="text-uppercase text-muted small mb-1">Nombre del cliente</div>
+        <div class="fs-4 fw-bold text-light lh-1">{{ client_name }}</div>
+    </div>
+    {% endif %}
     {% if code %}
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">

@@ -72,6 +72,7 @@ def _build_subscription_context(client, correlative=None, installation_id=None, 
 
     return {
         'client': client,
+        'client_name': client.description if client and getattr(client, 'description', None) else '',
         'subscriptions': subscriptions,
         'installations': installations,
         'available_installations': available_installations,
