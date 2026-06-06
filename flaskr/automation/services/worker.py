@@ -1,17 +1,11 @@
-import requests
-import urllib3
 from datetime import date
 from flask import current_app
-from requests.auth import HTTPBasicAuth
 
-from flaskr import mk_router
+from flaskr import conn_mikrotik
 from flaskr.subscriptions.services.querys import (
 	get_overdue_active_subscriptions,
 	update_subscription_status,
 )
-
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def _get_reference_date() -> date | None:
@@ -32,13 +26,17 @@ def _get_reference_date() -> date | None:
 		return None
 
 
-def client_activation(mac_address: str, enabled: bool = True):
+def client_activation(mac_address: str, route_id=None, enabled: bool = True):
+	conn_mk = conn_mikrotik(route_id)
 	if not mac_address:
 		return False, 'La direccion MAC es obligatoria.'
 
-	leases, exito = mk_router.query('/ip/dhcp-server/lease')
+	leases, exito = conn_mk.query('/ip/dhcp-server/lease')
 	if not exito:
 		return False, leases
+
+	if isinstance(leases, dict):
+		leases = [leases]
 
 	if not isinstance(leases, list):
 		return False, 'Respuesta invalida del MikroTik al consultar leases DHCP.'
@@ -62,20 +60,9 @@ def client_activation(mac_address: str, enabled: bool = True):
 		return False, f'No se encontro una lease DHCP para la MAC {normalized_mac}.'
 
 	block_access = 'no' if enabled else 'yes'
-
-	try:
-		patch_response = requests.patch(
-			f"{mk_router.base_url}/ip/dhcp-server/lease/{lease_id}",
-			auth=HTTPBasicAuth(mk_router.auth.username, mk_router.auth.password),
-			verify=False,
-			timeout=5,
-			json={'block-access': block_access},
-		)
-	except requests.RequestException as error:
-		return False, f'No se pudo actualizar el cliente en el MikroTik: {error}'
-
-	if patch_response.status_code not in (200, 204):
-		return False, f'Error del router {patch_response.status_code}: {patch_response.text}'
+	ok, error_message = conn_mk.set_dhcp_lease_block_access(lease_id, block_access)
+	if not ok:
+		return False, error_message
 
 	status_text = 'activado' if enabled else 'desactivado'
 	return True, f'Cliente {status_text} correctamente.'
@@ -98,7 +85,8 @@ def suspend_overdue_subscriptions():
 			)
 			continue
 
-		ok, message = client_activation(mac_address, enabled=False)
+		route_id = getattr(subscription, 'route_id', None)
+		ok, message = client_activation(mac_address, route_id, enabled=False)
 		if not ok:
 			errors.append(f'Suscripcion {subscription.correlative}: {message}')
 			continue

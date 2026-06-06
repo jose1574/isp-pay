@@ -3,20 +3,70 @@ import os
 import click
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 
 from .mikrotik_services import MikroTikClient
 
+db = SQLAlchemy()
 # Inicializamos el cliente apuntando a tu router (usando http por defecto si no tienes SSL activo)
-mk_router = MikroTikClient(
-    host="192.168.33.1", 
-    user="josegomez", 
-    password="jose1574**", 
-    use_ssl=False  # Cambia a True si activaste www-ssl en el MikroTik
-)
 
+def get_credentials_route(route_id=None):
+    if route_id is None:
+        query = text(
+            """
+            SELECT correlative, ip_address, api_port, username, password
+            FROM genius.routes
+            ORDER BY is_active DESC, correlative ASC
+            LIMIT 1
+            """
+        )
+        return db.session.execute(query).mappings().first()
+
+    query = text(
+        """
+        SELECT correlative, ip_address, api_port, username, password
+        FROM genius.routes
+        WHERE correlative = :route_id
+        LIMIT 1
+        """
+    )
+    return db.session.execute(query, {'route_id': route_id}).mappings().first()
+
+
+def conn_mikrotik(route_id=None):
+    credentials = get_credentials_route(route_id)
+    if not credentials:
+        raise ValueError('No se encontraron credenciales de router para la ruta indicada.')
+
+    ip_address = (credentials.get('ip_address') or '').strip()
+    if not ip_address:
+        raise ValueError('La ruta no tiene ip_address configurada.')
+
+    api_port = credentials.get('api_port') or 8728
+    try:
+        api_port = int(api_port)
+    except (TypeError, ValueError):
+        raise ValueError('La ruta tiene un api_port invalido.')
+
+    username = (credentials.get('username') or '').strip()
+    password = credentials.get('password') or ''
+    if not username:
+        raise ValueError('La ruta no tiene username configurado.')
+    if not password:
+        raise ValueError('La ruta no tiene password configurado.')
+
+    use_ssl = api_port == 8729
+
+    mk_router = MikroTikClient(
+        host=ip_address,
+        user=username,
+        password=password,
+        use_ssl=use_ssl,
+        port=api_port,
+    )
+    return mk_router
 # Hacemos que el objeto mk_router sea accesible o lo importamos donde se necesite
 
-db = SQLAlchemy()
 def create_app(test_config=None):
     from .db_bootstrap import bootstrap_database
 

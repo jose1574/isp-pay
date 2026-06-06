@@ -76,11 +76,16 @@
           <td>{{ subscription.price_applied if subscription.price_applied is not none else '-' }}</td>
           <td onclick="event.stopPropagation();">
             <div class="d-flex gap-2 flex-wrap">
-              <form method="post" action="{{ url_for('automation.deactivate_client', mac_address=subscription.installation_mac_address) }}" class="m-0 p-0">
+              <form method="post" action="{{ url_for('automation.deactivate_client') }}" class="m-0 p-0">
+
+                  <input type="hidden" name="route_id" value="{{ subscription.route_id }}">
+                  <input type="hidden" name="mac_address" value="{{ subscription.installation_mac_address }}">
                   <input type="hidden" name="correlative" value="{{ subscription.correlative }}">
                 <button type="submit" class="btn btn-sm btn-danger">Desactivar</button>
               </form>
-              <form method="post" action="{{ url_for('automation.activate_client', mac_address=subscription.installation_mac_address) }}" class="m-0 p-0">
+              <form method="post" action="{{ url_for('automation.activate_client') }}" class="m-0 p-0">
+                  <input type="hidden" name="route_id" value="{{ subscription.route_id }}">
+                  <input type="hidden" name="mac_address" value="{{ subscription.installation_mac_address }}">
                   <input type="hidden" name="correlative" value="{{ subscription.correlative }}">
                 <button type="submit" class="btn btn-sm btn-success">Activar</button>
               </form>

@@ -259,6 +259,7 @@ def get_subscriptions(page: int | None = None, per_page: int | None = None, sear
             i.location AS installation_location,
             i.install_date AS installation_date,
             i.mac_address AS installation_mac_address,
+            i.route_id,
             {installation_alias_expr} AS installation_no_installation
         FROM genius.subscription s
         LEFT JOIN genius.plans p ON p.code = s.plan_code
@@ -584,7 +585,8 @@ def get_overdue_active_subscriptions(reference_date=None):
                 s.status,
                 s.cutoff_day,
                 s.credit_day,
-                i.mac_address AS installation_mac_address
+                i.mac_address AS installation_mac_address,
+                i.route_id
             FROM genius.subscription s
             LEFT JOIN genius.installations i ON i.id = s.installation
             WHERE s.status = 'activo'
