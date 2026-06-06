@@ -72,6 +72,10 @@
                 <li><a class="dropdown-item" href="{{ url_for('config.config_nap') }}">Cajas NAP</a></li>
               </ul>
             </li>
+
+            <li class="nav-item nav-pill-item">
+              <a class="nav-link nav-pill-link {% if request.endpoint and request.endpoint.startswith('automation.') %}active{% endif %}" href="{{ url_for('automation.automation') }}">Automatizaciones</a>
+            </li>
           </ul>
         </div>
       </div>

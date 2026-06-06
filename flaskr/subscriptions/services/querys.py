@@ -573,6 +573,84 @@ def update_subscription_status(correlative: int, status: str):
         return False
 
 
+def _upsert_subscription_receivable_link(
+    receivable_correlative: int,
+    subscription_correlative: int,
+    client_code: str,
+    emission_date,
+    amount: float,
+):
+    exists = db.session.execute(
+        text(
+            """
+            SELECT id
+            FROM genius.subscription_receivable_link
+            WHERE receivable_correlative = :receivable_correlative
+            LIMIT 1
+            """
+        ),
+        {'receivable_correlative': receivable_correlative},
+    ).first()
+
+    if exists:
+        db.session.execute(
+            text(
+                """
+                UPDATE genius.subscription_receivable_link
+                SET
+                    subscription_correlative = :subscription_correlative,
+                    client_code = :client_code,
+                    emission_date = :emission_date,
+                    amount = :amount,
+                    updated_at = NOW()
+                WHERE receivable_correlative = :receivable_correlative
+                """
+            ),
+            {
+                'receivable_correlative': receivable_correlative,
+                'subscription_correlative': subscription_correlative,
+                'client_code': client_code,
+                'emission_date': emission_date,
+                'amount': amount,
+            },
+        )
+        return
+
+    db.session.execute(
+        text(
+            """
+            INSERT INTO genius.subscription_receivable_link (
+                receivable_correlative,
+                subscription_correlative,
+                client_code,
+                emission_date,
+                amount,
+                payment_status,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                :receivable_correlative,
+                :subscription_correlative,
+                :client_code,
+                :emission_date,
+                :amount,
+                'pending_payment',
+                NOW(),
+                NOW()
+            )
+            """
+        ),
+        {
+            'receivable_correlative': receivable_correlative,
+            'subscription_correlative': subscription_correlative,
+            'client_code': client_code,
+            'emission_date': emission_date,
+            'amount': amount,
+        },
+    )
+
+
 def get_overdue_active_subscriptions(reference_date=None):
     params = {}
     date_expression = 'CURRENT_DATE'
@@ -652,6 +730,14 @@ def get_overdue_active_subscriptions(reference_date=None):
               AND s.credit_day IS NOT NULL
               AND {date_expression}::date >= s.cutoff_day
               AND {date_expression}::date > ({billing_period_cutoff_expr} + s.credit_day)
+                            AND NOT EXISTS (
+                                        SELECT 1
+                                        FROM genius.subscription_receivable_link l
+                                        JOIN receivable r ON r.correlative = l.receivable_correlative
+                                        WHERE l.subscription_correlative = s.correlative
+                                            AND l.emission_date = ({billing_period_cutoff_expr})
+                                            AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0
+                            )
             ORDER BY s.cutoff_day ASC, s.correlative ASC
             """
         )
@@ -724,17 +810,35 @@ def create_receivable_for_overdue_subscription(subscription, reference_date=None
         f"Mes facturado: {period_label}."
     )
 
+    linked_receivable = db.session.execute(
+        text(
+            """
+            SELECT receivable_correlative
+            FROM genius.subscription_receivable_link
+            WHERE subscription_correlative = :subscription_correlative
+              AND emission_date = :emission_date
+            LIMIT 1
+            """
+        ),
+        {
+            'subscription_correlative': subscription.correlative,
+            'emission_date': emission_date,
+        },
+    ).first()
+
+    if linked_receivable:
+        return True, None
+
     already_exists = db.session.execute(
         text(
             """
-            SELECT EXISTS (
-                SELECT 1
-                FROM receivable
-                WHERE operation_type = 'RECEIVABLE'
-                  AND client_code = :client_code
-                  AND description = :description
-                  AND emission_date = :emission_date
-            )
+            SELECT correlative
+            FROM receivable
+            WHERE operation_type = 'RECEIVABLE'
+              AND client_code = :client_code
+              AND description = :description
+              AND emission_date = :emission_date
+            LIMIT 1
             """
         ),
         {
@@ -742,9 +846,17 @@ def create_receivable_for_overdue_subscription(subscription, reference_date=None
             'description': description,
             'emission_date': emission_date,
         },
-    ).scalar_one()
+    ).first()
 
     if already_exists:
+        _upsert_subscription_receivable_link(
+            receivable_correlative=already_exists.correlative,
+            subscription_correlative=subscription.correlative,
+            client_code=client_code,
+            emission_date=emission_date,
+            amount=amount,
+        )
+        db.session.commit()
         return True, None
 
     try:
@@ -836,6 +948,14 @@ def create_receivable_for_overdue_subscription(subscription, reference_date=None
                 'p_igtf': 0.0,
             },
         ).scalar_one()
+
+        _upsert_subscription_receivable_link(
+            receivable_correlative=receivable_correlative,
+            subscription_correlative=subscription.correlative,
+            client_code=client_code,
+            emission_date=emission_date,
+            amount=amount,
+        )
         db.session.commit()
         return True, receivable_correlative
     except SQLAlchemyError as error:

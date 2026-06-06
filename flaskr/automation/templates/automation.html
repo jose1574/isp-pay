@@ -6,10 +6,115 @@
 
 {% block content %}
 <div class="container">
-	<div class="card p-4">
+	<div class="card p-4 mb-4">
 		<p class="h4 mb-3">Panel de Automatización</p>
-		<p class="text-body-secondary mb-1">Aquí se visualiza la ejecución de tareas automáticas sobre clientes y suscripciones.</p>
-		<p class="mb-0">{{ info }}</p>
+		<p class="text-body-secondary mb-3">Aquí se visualiza la ejecución de tareas automáticas sobre clientes y suscripciones.</p>
+
+		<div class="row g-3 mb-3">
+			<div class="col-md-8">
+				<div class="border rounded p-3 h-100">
+					<p class="h6 mb-3">Estado de Routers</p>
+					<div class="table-responsive">
+						<table class="table table-sm table-hover align-middle mb-0">
+							<thead>
+								<tr>
+									<th>Ruta</th>
+									<th>Identity</th>
+									<th>IP</th>
+									<th>Puerto</th>
+									<th>Estado</th>
+									<th>Version</th>
+									<th>Uptime</th>
+								</tr>
+							</thead>
+							<tbody>
+								{% if routers_info %}
+									{% for router in routers_info %}
+										<tr>
+											<td>{{ router.description or ('ruta-' ~ router.route_id) }}</td>
+											<td>{{ router.identity or '-' }}</td>
+											<td>{{ router.ip_address or '-' }}</td>
+											<td>{{ router.api_port or '-' }}</td>
+											<td>
+												{% if router.status == 'success' %}
+													<span class="badge text-bg-success">online</span>
+												{% else %}
+													<span class="badge text-bg-danger">error</span>
+												{% endif %}
+											</td>
+											<td>{{ router.version or '-' }}</td>
+											<td>{{ router.uptime or '-' }}</td>
+										</tr>
+									{% endfor %}
+								{% else %}
+									<tr>
+										<td colspan="7" class="text-center text-body-secondary">No hay routers configurados en genius.routes.</td>
+									</tr>
+								{% endif %}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="border rounded p-3 h-100 d-flex flex-column justify-content-center gap-2">
+					<form method="post" action="{{ url_for('automation.run_overdue_check') }}">
+						<button type="submit" class="btn btn-warning w-100">Ejecutar revision de vencidos</button>
+					</form>
+					<form method="post" action="{{ url_for('automation.run_paid_check') }}">
+						<button type="submit" class="btn btn-success w-100">Ejecutar reactivacion por pagos</button>
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="card p-4">
+		<p class="h5 mb-3">Registro de Cambios Automaticos</p>
+		<div class="table-responsive">
+			<table class="table table-sm table-hover align-middle mb-0">
+				<thead>
+					<tr>
+						<th>Fecha</th>
+						<th>Automatizacion</th>
+						<th>Accion</th>
+						<th>Estado</th>
+						<th>Suscripcion</th>
+						<th>CxC</th>
+						<th>Cliente</th>
+						<th>Mensaje</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% if events %}
+						{% for event in events %}
+							<tr>
+								<td>{{ event.created_at }}</td>
+								<td>{{ event.automation_name }}</td>
+								<td>{{ event.action }}</td>
+								<td>
+									{% if event.status == 'success' %}
+										<span class="badge text-bg-success">{{ event.status }}</span>
+									{% elif event.status == 'error' %}
+										<span class="badge text-bg-danger">{{ event.status }}</span>
+									{% else %}
+										<span class="badge text-bg-secondary">{{ event.status }}</span>
+									{% endif %}
+								</td>
+								<td>{{ event.subscription_correlative or '-' }}</td>
+								<td>{{ event.receivable_correlative or '-' }}</td>
+								<td>{{ event.client_code or '-' }}</td>
+								<td>{{ event.message }}</td>
+							</tr>
+						{% endfor %}
+					{% else %}
+						<tr>
+							<td colspan="8" class="text-center text-body-secondary">No hay eventos de automatizacion registrados todavia.</td>
+						</tr>
+					{% endif %}
+				</tbody>
+			</table>
+		</div>
 	</div>
 </div>
 

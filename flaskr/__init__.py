@@ -103,7 +103,10 @@ def create_app(test_config=None):
     from . import subscriptions
     from . import config
     from . import automation
-    from .automation.services.worker import suspend_overdue_subscriptions
+    from .automation.services.worker import (
+        process_paid_subscription_reactivations,
+        suspend_overdue_subscriptions,
+    )
     
     app.register_blueprint(dashboard.dashboard_bp, url_prefix='/')
     app.register_blueprint(clients.clients_bp, url_prefix='/clients')
@@ -151,6 +154,22 @@ def create_app(test_config=None):
                 result['processed'],
                 result['suspended'],
                 result.get('receivables_created', 0),
+                len(result['errors']),
+            )
+        )
+
+        for error in result['errors']:
+            click.echo(f'ERROR: {error}')
+
+    @app.cli.command('check-paid-subscriptions')
+    @click.option('--batch-size', default=100, show_default=True, type=int)
+    def check_paid_subscriptions_command(batch_size):
+        result = process_paid_subscription_reactivations(batch_size=batch_size)
+        click.echo(
+            'Reactivacion por pagos completada | procesadas={} | activadas={} | ya_activas={} | errores={}'.format(
+                result['processed'],
+                result['activated'],
+                result['already_active'],
                 len(result['errors']),
             )
         )
