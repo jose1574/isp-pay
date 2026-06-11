@@ -10,11 +10,9 @@
 			hx-target="#nap-port-options-container"
 			hx-swap="outerHTML"
 			hx-include="#nap_id"
-			{% if not nap_options %}disabled{% endif %}
-			required
 		>
-			<option value="" {% if not selected_nap_id %}selected{% endif %} disabled>
-				{% if nap_options %}Seleccione una NAP{% else %}Primero seleccione router con NAP disponibles{% endif %}
+			<option value="" {% if not selected_nap_id %}selected{% endif %}>
+				Sin NAP
 			</option>
 			{% for nap in nap_options %}
 			<option value="{{ nap.correlative }}" {% if selected_nap_id and selected_nap_id == nap.correlative %}selected{% endif %}>
@@ -22,6 +20,7 @@
 			</option>
 			{% endfor %}
 		</select>
+		<div class="form-text">Dejar en blanco para guardar sin caja NAP.</div>
 	</div>
 
 	<div id="nap-port-options-container" class="col">

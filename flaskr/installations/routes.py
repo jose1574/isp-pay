@@ -419,16 +419,20 @@ def save_installation():
         flash('Seleccione un router valido.', 'warning')
         return redirect(url_for('installations.installation', code=client_code))
 
-    if not raw_nap_id or not raw_nap_detail_id:
-        flash('Seleccione una caja NAP y un puerto de NAP para la instalacion.', 'warning')
-        return redirect(url_for('installations.installation', code=client_code))
+    if raw_nap_detail_id:
+        if not raw_nap_id:
+            flash('La seleccion de NAP o puerto es invalida.', 'warning')
+            return redirect(url_for('installations.installation', code=client_code))
 
-    try:
-        nap_id = int(raw_nap_id)
-        nap_detail_id = int(raw_nap_detail_id)
-    except ValueError:
-        flash('La seleccion de NAP o puerto es invalida.', 'warning')
-        return redirect(url_for('installations.installation', code=client_code))
+        try:
+            nap_id = int(raw_nap_id)
+            nap_detail_id = int(raw_nap_detail_id)
+        except ValueError:
+            flash('La seleccion de NAP o puerto es invalida.', 'warning')
+            return redirect(url_for('installations.installation', code=client_code))
+    else:
+        nap_id = None
+        nap_detail_id = None
 
     installation_id = None
     if raw_installation_id:
@@ -440,14 +444,15 @@ def save_installation():
     was_update = bool(installation_id)
 
     if was_update:
-        if not is_valid_nap_port_for_route(
-            route_id=route_id,
-            nap_id=nap_id,
-            nap_detail_id=nap_detail_id,
-            installation_id=installation_id,
-        ):
-            flash('La relacion Router -> NAP -> Puerto no es valida o el puerto ya esta en uso.', 'warning')
-            return redirect(url_for('installations.installation', code=client_code, installation_id=installation_id))
+        if nap_detail_id is not None:
+            if not is_valid_nap_port_for_route(
+                route_id=route_id,
+                nap_id=nap_id,
+                nap_detail_id=nap_detail_id,
+                installation_id=installation_id,
+            ):
+                flash('La relacion Router -> NAP -> Puerto no es valida o el puerto ya esta en uso.', 'warning')
+                return redirect(url_for('installations.installation', code=client_code, installation_id=installation_id))
 
         update_result = update_installation(
             installation_id=installation_id,
@@ -468,14 +473,15 @@ def save_installation():
             flash('Error al actualizar la instalacion.', 'danger')
             return redirect(url_for('installations.installation', code=client_code))
     else:
-        if not is_valid_nap_port_for_route(
-            route_id=route_id,
-            nap_id=nap_id,
-            nap_detail_id=nap_detail_id,
-            installation_id=None,
-        ):
-            flash('La relacion Router -> NAP -> Puerto no es valida o el puerto ya esta en uso.', 'warning')
-            return redirect(url_for('installations.installation', code=client_code))
+        if nap_detail_id is not None:
+            if not is_valid_nap_port_for_route(
+                route_id=route_id,
+                nap_id=nap_id,
+                nap_detail_id=nap_detail_id,
+                installation_id=None,
+            ):
+                flash('La relacion Router -> NAP -> Puerto no es valida o el puerto ya esta en uso.', 'warning')
+                return redirect(url_for('installations.installation', code=client_code))
 
         installation_id = create_installation(
             client_code=client_code,

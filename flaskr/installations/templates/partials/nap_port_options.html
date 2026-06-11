@@ -5,10 +5,9 @@
 		name="nap_detail_id"
 		class="form-select"
 		{% if not nap_port_options %}disabled{% endif %}
-		required
 	>
-		<option value="" {% if not selected_nap_detail_id %}selected{% endif %} disabled>
-			{% if nap_port_options %}Seleccione un puerto{% else %}Seleccione una NAP para ver puertos{% endif %}
+		<option value="" {% if not selected_nap_detail_id %}selected{% endif %}>
+			Sin puerto
 		</option>
 		{% for port in nap_port_options %}
 		<option value="{{ port.correlative }}" {% if selected_nap_detail_id and selected_nap_detail_id == port.correlative %}selected{% endif %}>
@@ -16,4 +15,5 @@
 		</option>
 		{% endfor %}
 	</select>
+	<div class="form-text">Dejar en blanco para guardar sin puerto de NAP.</div>
 </div>
