@@ -18,7 +18,7 @@
         >
     </div>
     <form action="{{ url_for('clients.save_client') }}" method="post" id="client-form">
-        <input type="text" name="code" id="code-hidden" value="{{ code if code else '' }}" hidden>
+        <input type="hidden" name="code" id="code-hidden" value="{{ code if code else '' }}">
         <div class="row">            
             <div class="col">
                 <label for="description" class="form-label">Nombre</label>
@@ -52,7 +52,7 @@
         <div class="row">
             <div class="col">
                 <label for="email" class="form-label">Correo</label>
-                <input type="text" id="email" name="email" placeholder="@" class="form-control"
+                <input type="text" id="email" name="email" value="@" class="form-control"
                 value="{{ client.email if client else '' }}" required {% if not form_enabled %}disabled{% endif %}>
             </div>
             <div class="col">
@@ -82,11 +82,29 @@
         const form = document.getElementById('client-form');
         const saveButton = document.getElementById('save-client-btn');
         const codeInput = document.getElementById('code');
+        const codeHiddenInput = document.getElementById('code-hidden');
         const nameInput = document.getElementById('description');
 
         if (!form || !saveButton) {
             return;
         }
+
+        const formFields = Array.from(form.querySelectorAll('input, select, textarea')).filter(
+            (field) => field !== codeHiddenInput,
+        );
+
+        const isCodeConfirmed = () => {
+            return (
+                codeInput &&
+                codeHiddenInput &&
+                codeInput.value.trim() !== '' &&
+                codeInput.value.trim() === codeHiddenInput.value.trim()
+            );
+        };
+
+        const areFieldsEnabled = () => {
+            return {{ 'true' if form_enabled else 'false' }} && isCodeConfirmed();
+        };
 
         const isRequiredFieldComplete = (field) => {
             if (field.disabled) {
@@ -101,10 +119,30 @@
             return Array.from(requiredFields).every(isRequiredFieldComplete);
         };
 
+        const setFieldsEnabled = () => {
+            const enabled = areFieldsEnabled();
+            formFields.forEach((field) => {
+                if (field === codeHiddenInput) {
+                    return;
+                }
+                field.disabled = !enabled;
+            });
+        };
+
         const updateSaveButtonState = () => {
-            const canSave = {{ 'true' if form_enabled else 'false' }} && isFormComplete();
+            const canSave = areFieldsEnabled() && isFormComplete();
             saveButton.disabled = !canSave;
         };
+
+        codeInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                if (codeHiddenInput) {
+                    codeHiddenInput.value = codeInput.value.trim();
+                }
+                setFieldsEnabled();
+                updateSaveButtonState();
+            }
+        });
 
         form.addEventListener('input', updateSaveButtonState);
         form.addEventListener('change', updateSaveButtonState);
@@ -122,7 +160,7 @@
             }
         });
 
-        // Al renderizar el parcial tras una búsqueda HTMX, mover el foco a Nombre.
+        setFieldsEnabled();
         if (codeInput && nameInput && codeInput.value.trim() !== '' && !nameInput.disabled) {
             nameInput.focus();
             nameInput.select();

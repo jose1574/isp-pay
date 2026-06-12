@@ -110,9 +110,7 @@ def create_client(
             'credit_days': credit_days
         }).fetchone()
 
-        if result is not None:
-            db.session.commit()
-
+        db.session.commit()
         return result
 
     except SQLAlchemyError as error:

@@ -102,33 +102,39 @@ def search_client():
 
 @clients_bp.route('/add/save', methods=['POST'])
 def save_client():
-    code = request.form.get('code')
+    code = (request.form.get('code') or '').strip()
     description = request.form.get('description')
     address = request.form.get('address')
     email = request.form.get('email')
     phone = request.form.get('phone')
     area_sales = request.form.get('area_sales')
     credit_days = request.form.get('credit_days')
-    existing_client = get_client(code) if code else None
 
+    if not code:
+        flash('Debe ingresar una cédula de cliente antes de guardar.', 'warning')
+        return redirect(url_for('clients.client', code=code))
 
+    existing_client = get_client(code)
 
     try:
-        client_saver = create_client if existing_client else create_client
-        client_saver(
-            code, 
+        create_client(
+            code,
             description,
             address,
             email,
             phone,
             area_sales,
-            credit_days
+            credit_days,
         )
     except Exception as e:
         flash(f'Error al guardar el cliente: {str(e)}', 'danger')
+        return redirect(url_for('clients.client', code=code))
 
-    flash("Se actualizaron correctamente los datos" if existing_client else "Se guardaron correctamente los datos", 'success')
-    return redirect(url_for('clients.client'))
+    flash(
+        'Se actualizaron correctamente los datos' if existing_client else 'Se guardaron correctamente los datos',
+        'success',
+    )
+    return redirect(url_for('clients.client', code=code))
 
 
 @clients_bp.route('/modal_clients')
