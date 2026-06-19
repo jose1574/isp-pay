@@ -650,7 +650,6 @@ def _upsert_subscription_receivable_link(
         },
     )
 
-
 def get_overdue_active_subscriptions(reference_date=None):
     params = {}
     date_expression = 'CURRENT_DATE'
@@ -676,15 +675,16 @@ def get_overdue_active_subscriptions(reference_date=None):
         )::date
     """
 
+    # CORRECCIÓN: Se cambió {date_expression}::date por CAST({date_expression} AS DATE)
     previous_cutoff_expr = f"""
         (
-            date_trunc('month', ({date_expression}::date - INTERVAL '1 month'))::date
+            date_trunc('month', (CAST({date_expression} AS DATE) - INTERVAL '1 month'))::date
             + (
                 LEAST(
                     EXTRACT(DAY FROM s.cutoff_day)::int,
                     EXTRACT(
                         DAY FROM (
-                            date_trunc('month', ({date_expression}::date - INTERVAL '1 month'))
+                            date_trunc('month', (CAST({date_expression} AS DATE) - INTERVAL '1 month'))
                             + INTERVAL '1 month - 1 day'
                         )
                     )::int
@@ -693,10 +693,11 @@ def get_overdue_active_subscriptions(reference_date=None):
         )::date
     """
 
+    # CORRECCIÓN: Se cambió {date_expression}::date por CAST({date_expression} AS DATE)
     billing_period_cutoff_expr = f"""
         (
             CASE
-                WHEN {date_expression}::date >= ({current_cutoff_expr}) THEN ({current_cutoff_expr})
+                WHEN CAST({date_expression} AS DATE) >= ({current_cutoff_expr}) THEN ({current_cutoff_expr})
                 ELSE ({previous_cutoff_expr})
             END
         )
@@ -728,23 +729,22 @@ def get_overdue_active_subscriptions(reference_date=None):
             WHERE s.status = 'activo'
               AND s.cutoff_day IS NOT NULL
               AND s.credit_day IS NOT NULL
-              AND {date_expression}::date >= s.cutoff_day
-              AND {date_expression}::date > ({billing_period_cutoff_expr} + s.credit_day)
-                            AND NOT EXISTS (
-                                        SELECT 1
-                                        FROM genius.subscription_receivable_link l
-                                        JOIN receivable r ON r.correlative = l.receivable_correlative
-                                        WHERE l.subscription_correlative = s.correlative
-                                            AND l.emission_date = ({billing_period_cutoff_expr})
-                                            AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0
-                            )
+              -- CORRECCIÓN A CONTINUACIÓN:
+              AND CAST({date_expression} AS DATE) >= s.cutoff_day
+              AND CAST({date_expression} AS DATE) > ({billing_period_cutoff_expr} + s.credit_day)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM genius.subscription_receivable_link l
+                  JOIN receivable r ON r.correlative = l.receivable_correlative
+                  WHERE l.subscription_correlative = s.correlative
+                    AND l.emission_date = ({billing_period_cutoff_expr})
+                    AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0
+              )
             ORDER BY s.cutoff_day ASC, s.correlative ASC
             """
-        )
-        ,
+        ),
         params,
     ).fetchall()
-
 
 def create_receivable_for_overdue_subscription(subscription, reference_date=None):
     emission_date = getattr(subscription, 'billing_period_cutoff', None)

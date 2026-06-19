@@ -16,3 +16,5 @@ Reactivacion por pagos completada | procesadas=0 | activadas=0 | ya_activas=0 | 
 Reactivacion por pagos completada | procesadas=0 | activadas=0 | ya_activas=0 | errores=0
  * Tip: There are .env files present. Install python-dotenv to use them.
 Reactivacion por pagos completada | procesadas=1 | activadas=1 | ya_activas=0 | errores=0
+Reactivacion por pagos completada | procesadas=0 | activadas=0 | ya_activas=0 | errores=0
+Reactivacion por pagos completada | procesadas=1 | activadas=1 | ya_activas=0 | errores=0

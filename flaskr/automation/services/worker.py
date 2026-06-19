@@ -11,9 +11,11 @@ from flaskr.subscriptions.services.querys import (
 
 
 def _get_reference_date() -> date | None:
-	configured_date = current_app.config.get('AUTOMATION_REFERENCE_DATE')
-	if not configured_date:
-		return None
+	# configured_date = current_app.config.get('AUTOMATION_REFERENCE_DATE')
+	# if not configured_date:
+	# 	return None
+	#devuelve una fecha correcta manualmente
+	return date(2026, 6, 21)
 
 
 def log_automation_event(
