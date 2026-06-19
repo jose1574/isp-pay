@@ -105,6 +105,7 @@ def create_app(test_config=None):
     from . import automation
     from .automation.services.worker import (
         process_paid_subscription_reactivations,
+        process_subscription_billing,
         suspend_overdue_subscriptions,
     )
     
@@ -147,14 +148,15 @@ def create_app(test_config=None):
 
     @app.cli.command('check-overdue-subscriptions')
     def check_overdue_subscriptions_command():
-        #suspender suscripciones vencidas
-        result = suspend_overdue_subscriptions()
+        # generar cuentas por cobrar en fecha de corte y suspender suscripciones vencidas tras credit days
+        result = process_subscription_billing()
         click.echo(
-            'Revision completada | fecha={} | procesadas={} | suspendidas={} | cx_cobrar_creadas={} | errores={}'.format(
+            'Revision completada | fecha={} | due_procesadas={} | due_creadas={} | overdue_procesadas={} | suspendidas={} | errores={}'.format(
                 result['reference_date'],
-                result['processed'],
+                result['due_processed'],
+                result['due_created'],
+                result['overdue_processed'],
                 result['suspended'],
-                result.get('receivables_created', 0),
                 len(result['errors']),
             )
         )

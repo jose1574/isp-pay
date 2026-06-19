@@ -7,7 +7,7 @@ from .services.worker import (
     client_activation,
     get_recent_automation_events,
     process_paid_subscription_reactivations,
-    suspend_overdue_subscriptions,
+    process_subscription_billing,
 )
 
 from . import automation_bp
@@ -150,17 +150,22 @@ def deactivate_client():
 
 @automation_bp.route('/run-overdue-check', methods=['POST'])
 def run_overdue_check():
-    result = suspend_overdue_subscriptions()
+    result = process_subscription_billing()
 
     if result['suspended']:
         flash(
-            f"Se suspendieron {result['suspended']} suscripciones vencidas por falta de pago.",
+            f"Se crearon {result['due_created']} cuenta(s) por cobrar y se suspendieron {result['suspended']} suscripciones vencidas por falta de pago.",
             'warning',
         )
-    elif result['processed']:
+    elif result['due_created']:
+        flash(
+            f"Se crearon {result['due_created']} cuenta(s) por cobrar en fecha de cobro. No hubo suspensiones pendientes.",
+            'success',
+        )
+    elif result['overdue_processed']:
         flash('Se revisaron suscripciones vencidas, pero no todas pudieron suspenderse.', 'warning')
     else:
-        flash('No hay suscripciones vencidas para suspender en este momento.', 'success')
+        flash('No hay cuentas por cobrar por crear ni suscripciones vencidas para suspender en este momento.', 'success')
 
     for error in result['errors'][:3]:
         flash(error, 'danger')

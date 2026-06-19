@@ -580,6 +580,23 @@ def _upsert_subscription_receivable_link(
     emission_date,
     amount: float,
 ):
+    payment_status_expr = """
+        COALESCE(
+            (
+                SELECT
+                    CASE
+                        WHEN COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0 THEN 'paid_pending_activation'
+                        WHEN COALESCE(r.payment_applied, 0) > 0 THEN 'partial_payment'
+                        ELSE 'pending_payment'
+                    END
+                FROM public.receivable r
+                WHERE r.correlative = :receivable_correlative
+                LIMIT 1
+            ),
+            'pending_payment'
+        )
+    """
+
     exists = db.session.execute(
         text(
             """
@@ -602,9 +619,10 @@ def _upsert_subscription_receivable_link(
                     client_code = :client_code,
                     emission_date = :emission_date,
                     amount = :amount,
+                    payment_status = {payment_status_expr},
                     updated_at = NOW()
                 WHERE receivable_correlative = :receivable_correlative
-                """
+                """.format(payment_status_expr=payment_status_expr)
             ),
             {
                 'receivable_correlative': receivable_correlative,
@@ -635,11 +653,11 @@ def _upsert_subscription_receivable_link(
                 :client_code,
                 :emission_date,
                 :amount,
-                'pending_payment',
+                {payment_status_expr},
                 NOW(),
                 NOW()
             )
-            """
+            """.format(payment_status_expr=payment_status_expr)
         ),
         {
             'receivable_correlative': receivable_correlative,
@@ -675,7 +693,6 @@ def get_overdue_active_subscriptions(reference_date=None):
         )::date
     """
 
-    # CORRECCIÓN: Se cambió {date_expression}::date por CAST({date_expression} AS DATE)
     previous_cutoff_expr = f"""
         (
             date_trunc('month', (CAST({date_expression} AS DATE) - INTERVAL '1 month'))::date
@@ -693,7 +710,6 @@ def get_overdue_active_subscriptions(reference_date=None):
         )::date
     """
 
-    # CORRECCIÓN: Se cambió {date_expression}::date por CAST({date_expression} AS DATE)
     billing_period_cutoff_expr = f"""
         (
             CASE
@@ -729,22 +745,120 @@ def get_overdue_active_subscriptions(reference_date=None):
             WHERE s.status = 'activo'
               AND s.cutoff_day IS NOT NULL
               AND s.credit_day IS NOT NULL
-              -- CORRECCIÓN A CONTINUACIÓN:
-              AND CAST({date_expression} AS DATE) >= s.cutoff_day
               AND CAST({date_expression} AS DATE) > ({billing_period_cutoff_expr} + s.credit_day)
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM genius.subscription_receivable_link l
-                  JOIN receivable r ON r.correlative = l.receivable_correlative
-                  WHERE l.subscription_correlative = s.correlative
-                    AND l.emission_date = ({billing_period_cutoff_expr})
-                    AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0
+              AND (
+                  NOT EXISTS (
+                      SELECT 1
+                      FROM genius.subscription_receivable_link l
+                      WHERE l.subscription_correlative = s.correlative
+                        AND l.emission_date = ({billing_period_cutoff_expr})
+                  )
+                  OR EXISTS (
+                      SELECT 1
+                      FROM genius.subscription_receivable_link l
+                      LEFT JOIN public.receivable r ON r.correlative = l.receivable_correlative
+                      WHERE l.subscription_correlative = s.correlative
+                        AND l.emission_date = ({billing_period_cutoff_expr})
+                        AND (
+                            CASE
+                                WHEN r.correlative IS NULL THEN COALESCE(l.amount, 0)
+                                ELSE COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0))
+                            END
+                        ) > 0
+                  )
               )
             ORDER BY s.cutoff_day ASC, s.correlative ASC
             """
         ),
         params,
     ).fetchall()
+
+
+def get_due_active_subscriptions(reference_date=None):
+    params = {}
+    date_expression = 'CURRENT_DATE'
+
+    if reference_date is not None:
+        date_expression = ':reference_date'
+        params['reference_date'] = reference_date
+
+    current_cutoff_expr = f"""
+        (
+            date_trunc('month', {date_expression})::date
+            + (
+                LEAST(
+                    EXTRACT(DAY FROM s.cutoff_day)::int,
+                    EXTRACT(
+                        DAY FROM (
+                            date_trunc('month', {date_expression})
+                            + INTERVAL '1 month - 1 day'
+                        )
+                    )::int
+                ) - 1
+            ) * INTERVAL '1 day'
+        )::date
+    """
+
+    previous_cutoff_expr = f"""
+        (
+            date_trunc('month', (CAST({date_expression} AS DATE) - INTERVAL '1 month'))::date
+            + (
+                LEAST(
+                    EXTRACT(DAY FROM s.cutoff_day)::int,
+                    EXTRACT(
+                        DAY FROM (
+                            date_trunc('month', (CAST({date_expression} AS DATE) - INTERVAL '1 month'))
+                            + INTERVAL '1 month - 1 day'
+                        )
+                    )::int
+                ) - 1
+            ) * INTERVAL '1 day'
+        )::date
+    """
+
+    billing_period_cutoff_expr = f"""
+        (
+            CASE
+                WHEN CAST({date_expression} AS DATE) >= ({current_cutoff_expr}) THEN ({current_cutoff_expr})
+                ELSE ({previous_cutoff_expr})
+            END
+        )
+    """
+
+    return db.session.execute(
+        text(
+            f"""
+            SELECT
+                s.correlative,
+                s.client_code,
+                s.installation,
+                s.status,
+                s.cutoff_day,
+                s.credit_day,
+                {billing_period_cutoff_expr} AS billing_period_cutoff,
+                c.description AS client_name,
+                c.address AS client_address,
+                c.phone AS client_phone,
+                p.description AS plan_description,
+                COALESCE(s.price_applied, p.price, 0) AS receivable_amount,
+                p.coin AS plan_coin,
+                i.mac_address AS installation_mac_address,
+                i.route_id
+            FROM genius.subscription s
+            LEFT JOIN clients c ON c.code = s.client_code
+            LEFT JOIN genius.plans p ON p.code = s.plan_code
+            LEFT JOIN genius.installations i ON i.id = s.installation
+            WHERE s.status = 'activo'
+              AND s.cutoff_day IS NOT NULL
+              AND s.credit_day IS NOT NULL
+              AND CAST({date_expression} AS DATE) >= ({billing_period_cutoff_expr})
+              AND CAST({date_expression} AS DATE) <= ({billing_period_cutoff_expr} + s.credit_day)
+            ORDER BY s.cutoff_day ASC, s.correlative ASC
+            """
+        ),
+        params,
+    ).fetchall()
+
 
 def create_receivable_for_overdue_subscription(subscription, reference_date=None):
     emission_date = getattr(subscription, 'billing_period_cutoff', None)
@@ -827,13 +941,21 @@ def create_receivable_for_overdue_subscription(subscription, reference_date=None
     ).first()
 
     if linked_receivable:
+        _upsert_subscription_receivable_link(
+            receivable_correlative=linked_receivable.receivable_correlative,
+            subscription_correlative=subscription.correlative,
+            client_code=client_code,
+            emission_date=emission_date,
+            amount=amount,
+        )
+        db.session.commit()
         return True, None
 
     already_exists = db.session.execute(
         text(
             """
             SELECT correlative
-            FROM receivable
+            FROM public.receivable
             WHERE operation_type = 'RECEIVABLE'
               AND client_code = :client_code
               AND description = :description
@@ -863,7 +985,7 @@ def create_receivable_for_overdue_subscription(subscription, reference_date=None
         receivable_correlative = db.session.execute(
             text(
                 """
-                SELECT set_receivable(
+                SELECT public.set_receivable(
                     :p_correlative,
                     :p_operation_type,
                     :p_document_no,

@@ -1,5 +1,15 @@
 {
     "cSpell.words": [
         "clientes"
+    ],
+    "spellright.language": [
+        "en",
+        "es"
+    ],
+    "spellright.documentTypes": [
+        "markdown",
+        "latex",
+        "plaintext",
+        "python"
     ]
 }

@@ -5,17 +5,28 @@ from sqlalchemy import text
 from flaskr import conn_mikrotik, db
 from flaskr.subscriptions.services.querys import (
 	create_receivable_for_overdue_subscription,
+	get_due_active_subscriptions,
 	get_overdue_active_subscriptions,
 	update_subscription_status,
 )
 
 
 def _get_reference_date() -> date | None:
-	# configured_date = current_app.config.get('AUTOMATION_REFERENCE_DATE')
-	# if not configured_date:
-	# 	return None
-	#devuelve una fecha correcta manualmente
-	return date(2026, 6, 21)
+	configured_date = current_app.config.get('AUTOMATION_REFERENCE_DATE')
+	if not configured_date:
+		return date.today()
+
+	if isinstance(configured_date, date):
+		return configured_date
+
+	try:
+		return date.fromisoformat(str(configured_date))
+	except ValueError:
+		current_app.logger.warning(
+			'AUTOMATION_REFERENCE_DATE invalida: %s. Se usara CURRENT_DATE.',
+			configured_date,
+		)
+		return date.today()
 
 
 def log_automation_event(
@@ -95,17 +106,98 @@ def get_recent_automation_events(limit: int = 100):
 		{'limit': limit},
 	).mappings().all()
 
-	if isinstance(configured_date, date):
-		return configured_date
 
-	try:
-		return date.fromisoformat(str(configured_date))
-	except ValueError:
-		current_app.logger.warning(
-			'AUTOMATION_REFERENCE_DATE invalida: %s. Se usara CURRENT_DATE.',
-			configured_date,
+def create_due_receivables(reference_date=None):
+	reference_date = reference_date if reference_date is not None else _get_reference_date()
+	due_subscriptions = get_due_active_subscriptions(reference_date=reference_date)
+	processed = 0
+	created = 0
+	errors: list[str] = []
+
+	for subscription in due_subscriptions:
+		processed += 1
+		subscription_correlative = getattr(subscription, 'correlative', None)
+		client_code = getattr(subscription, 'client_code', None)
+		route_id = getattr(subscription, 'route_id', None)
+
+		receivable_ok, receivable_result = create_receivable_for_overdue_subscription(
+			subscription,
+			reference_date=reference_date,
 		)
-		return None
+		if not receivable_ok:
+			error_text = str(receivable_result)
+			errors.append(error_text)
+			log_automation_event(
+				automation_name='due_subscription_check',
+				action='create_receivable',
+				status='error',
+				message=error_text,
+				client_code=client_code,
+				subscription_correlative=subscription_correlative,
+				route_id=route_id,
+			)
+		else:
+			if receivable_result is not None:
+				created += 1
+				log_automation_event(
+					automation_name='due_subscription_check',
+					action='create_receivable',
+					status='success',
+					message='Cuenta por cobrar creada automaticamente para suscripcion en fecha de corte.',
+					client_code=client_code,
+					subscription_correlative=subscription_correlative,
+					receivable_correlative=int(receivable_result),
+					route_id=route_id,
+				)
+			else:
+				log_automation_event(
+					automation_name='due_subscription_check',
+					action='create_receivable',
+					status='info',
+					message='La cuenta por cobrar de la fecha de corte ya existia.',
+					client_code=client_code,
+					subscription_correlative=subscription_correlative,
+					route_id=route_id,
+				)
+
+	if processed == 0:
+		log_automation_event(
+			automation_name='due_subscription_check',
+			action='run_summary',
+			status='info',
+			message='No se encontraron suscripciones en fecha de corte para generar cuentas por cobrar.',
+		)
+	else:
+		log_automation_event(
+			automation_name='due_subscription_check',
+			action='run_summary',
+			status='success',
+			message=(
+				f'Proceso de generar cuentas por cobrar en fecha de corte finalizado: '
+				f'procesadas={processed}, creadas={created}, errores={len(errors)}.'
+			),
+		)
+
+	return {
+		'processed': processed,
+		'created': created,
+		'errors': errors,
+		'reference_date': reference_date,
+	}
+
+
+def process_subscription_billing(reference_date=None):
+	reference_date = reference_date if reference_date is not None else _get_reference_date()
+	due_result = create_due_receivables(reference_date=reference_date)
+	overdue_result = suspend_overdue_subscriptions(reference_date=reference_date)
+	return {
+		'reference_date': reference_date,
+		'due_processed': due_result['processed'],
+		'due_created': due_result['created'],
+		'overdue_processed': overdue_result['processed'],
+		'suspended': overdue_result['suspended'],
+		'errors': due_result['errors'] + overdue_result['errors'],
+	}
 
 
 def client_activation(mac_address: str, route_id=None, enabled: bool = True):
@@ -150,8 +242,8 @@ def client_activation(mac_address: str, route_id=None, enabled: bool = True):
 	return True, f'Cliente {status_text} correctamente.'
 
 
-def suspend_overdue_subscriptions():
-	reference_date = _get_reference_date()
+def suspend_overdue_subscriptions(reference_date=None):
+	reference_date = reference_date if reference_date is not None else _get_reference_date()
 	overdue_subscriptions = get_overdue_active_subscriptions(reference_date=reference_date)
 	processed = 0
 	suspended = 0
@@ -180,6 +272,8 @@ def suspend_overdue_subscriptions():
 				subscription_correlative=subscription_correlative,
 				route_id=route_id,
 			)
+			db.session.commit()
+			continue
 		else:
 			# Si receivable_result es None, ya existia una cuenta por cobrar para esta emision.
 			if receivable_result is not None:
@@ -386,7 +480,7 @@ def process_paid_subscription_reactivations(batch_size: int = 100):
 				"""
 				SELECT COUNT(*)
 				FROM genius.subscription_receivable_link l
-				JOIN receivable r ON r.correlative = l.receivable_correlative
+				JOIN public.receivable r ON r.correlative = l.receivable_correlative
 				WHERE l.subscription_correlative = :subscription_correlative
 				  AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) > 0
 				"""
