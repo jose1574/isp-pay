@@ -412,7 +412,111 @@ def run_overdue_subscription_check() -> None:
 		current_app.logger.warning(error)
 
 
+def sync_paid_subscription_reactivation_queue():
+	paid_links = db.session.execute(
+		text(
+			"""
+			SELECT
+				l.receivable_correlative,
+				l.subscription_correlative,
+				l.client_code,
+				l.payment_status,
+				s.status AS subscription_status,
+				q.id AS queue_id,
+				q.status AS queue_status
+			FROM genius.subscription_receivable_link l
+			JOIN public.receivable r ON r.correlative = l.receivable_correlative
+			JOIN genius.subscription s ON s.correlative = l.subscription_correlative
+			LEFT JOIN genius.subscription_reactivation_queue q
+				ON q.receivable_correlative = l.receivable_correlative
+			WHERE r.operation_type = 'RECEIVABLE'
+			  AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0
+			  AND COALESCE(r.total, 0) > 0
+			  AND COALESCE(r.payment_applied, 0) > 0
+			  AND (s.status <> 'activo' OR COALESCE(l.payment_status, '') <> 'activated')
+			ORDER BY l.updated_at ASC, l.id ASC
+			"""
+		)
+	).mappings().all()
+
+	synced = 0
+	for paid_link in paid_links:
+		receivable_correlative = paid_link['receivable_correlative']
+		subscription_correlative = paid_link['subscription_correlative']
+		client_code = paid_link['client_code']
+		queue_id = paid_link['queue_id']
+		queue_status = paid_link['queue_status']
+		subscription_status = paid_link['subscription_status']
+
+		if subscription_status == 'activo':
+			db.session.execute(
+				text(
+					"""
+					UPDATE genius.subscription_receivable_link
+					SET payment_status = 'activated', updated_at = NOW()
+					WHERE receivable_correlative = :receivable_correlative
+					"""
+				),
+				{'receivable_correlative': receivable_correlative},
+			)
+			continue
+
+		db.session.execute(
+			text(
+				"""
+				UPDATE genius.subscription_receivable_link
+				SET payment_status = 'paid_pending_activation', updated_at = NOW()
+				WHERE receivable_correlative = :receivable_correlative
+				"""
+			),
+			{'receivable_correlative': receivable_correlative},
+		)
+
+		if queue_id is None:
+			db.session.execute(
+				text(
+					"""
+					INSERT INTO genius.subscription_reactivation_queue (
+						receivable_correlative,
+						subscription_correlative,
+						client_code
+					)
+					VALUES (
+						:receivable_correlative,
+						:subscription_correlative,
+						:client_code
+					)
+					"""
+				),
+				{
+					'receivable_correlative': receivable_correlative,
+					'subscription_correlative': subscription_correlative,
+					'client_code': client_code,
+				},
+			)
+			synced += 1
+			continue
+
+		if queue_status != 'pending':
+			db.session.execute(
+				text(
+					"""
+					UPDATE genius.subscription_reactivation_queue
+					SET status = 'pending', processed_at = NULL, error_message = NULL
+					WHERE id = :id
+					"""
+				),
+				{'id': queue_id},
+			)
+			synced += 1
+
+	db.session.commit()
+	return synced
+
+
 def process_paid_subscription_reactivations(batch_size: int = 100):
+	synced = sync_paid_subscription_reactivation_queue()
+
 	rows = db.session.execute(
 		text(
 			"""
@@ -704,5 +808,6 @@ def process_paid_subscription_reactivations(batch_size: int = 100):
 		'processed': processed,
 		'activated': activated,
 		'already_active': already_active,
+		'synced': synced,
 		'errors': errors,
 	}

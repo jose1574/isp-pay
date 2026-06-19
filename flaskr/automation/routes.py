@@ -184,6 +184,8 @@ def run_paid_check():
         )
     elif result['processed']:
         flash('Se procesaron pagos, pero no hubo nuevas reactivaciones.', 'warning')
+    elif result['synced']:
+        flash('Se detectaron pagos completos, pero no hubo nuevas reactivaciones.', 'warning')
     else:
         flash('No hay pagos pendientes de procesar para reactivacion.', 'success')
 

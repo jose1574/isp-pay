@@ -169,7 +169,8 @@ def create_app(test_config=None):
     def check_paid_subscriptions_command(batch_size):
         result = process_paid_subscription_reactivations(batch_size=batch_size)
         click.echo(
-            'Reactivacion por pagos completada | procesadas={} | activadas={} | ya_activas={} | errores={}'.format(
+            'Reactivacion por pagos completada | sincronizadas={} | procesadas={} | activadas={} | ya_activas={} | errores={}'.format(
+                result['synced'],
                 result['processed'],
                 result['activated'],
                 result['already_active'],
