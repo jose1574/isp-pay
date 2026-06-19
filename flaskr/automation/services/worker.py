@@ -433,7 +433,14 @@ def sync_paid_subscription_reactivation_queue():
 			  AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0
 			  AND COALESCE(r.total, 0) > 0
 			  AND COALESCE(r.payment_applied, 0) > 0
-			  AND (s.status <> 'activo' OR COALESCE(l.payment_status, '') <> 'activated')
+			  AND NOT EXISTS (
+				  SELECT 1
+				  FROM genius.automation_event_log e
+				  WHERE e.automation_name = 'paid_subscription_reactivation'
+					AND e.action = 'reactivate_subscription'
+					AND e.status = 'success'
+					AND e.receivable_correlative = l.receivable_correlative
+			  )
 			ORDER BY l.updated_at ASC, l.id ASC
 			"""
 		)
@@ -447,19 +454,6 @@ def sync_paid_subscription_reactivation_queue():
 		queue_id = paid_link['queue_id']
 		queue_status = paid_link['queue_status']
 		subscription_status = paid_link['subscription_status']
-
-		if subscription_status == 'activo':
-			db.session.execute(
-				text(
-					"""
-					UPDATE genius.subscription_receivable_link
-					SET payment_status = 'activated', updated_at = NOW()
-					WHERE receivable_correlative = :receivable_correlative
-					"""
-				),
-				{'receivable_correlative': receivable_correlative},
-			)
-			continue
 
 		db.session.execute(
 			text(
@@ -633,40 +627,7 @@ def process_paid_subscription_reactivations(batch_size: int = 100):
 			continue
 
 		subscription_status = row['subscription_status']
-		if subscription_status == 'activo':
-			already_active += 1
-			db.session.execute(
-				text(
-					"""
-					UPDATE genius.subscription_receivable_link
-					SET payment_status = 'activated', updated_at = NOW()
-					WHERE receivable_correlative = :receivable_correlative
-					"""
-				),
-				{'receivable_correlative': row['receivable_correlative']},
-			)
-			db.session.execute(
-				text(
-					"""
-					UPDATE genius.subscription_reactivation_queue
-					SET status = 'done', processed_at = NOW(), error_message = NULL
-					WHERE id = :id
-					"""
-				),
-				{'id': queue_id},
-			)
-			db.session.commit()
-			log_automation_event(
-				automation_name='paid_subscription_reactivation',
-				action='reactivate_subscription',
-				status='info',
-				message='La suscripcion ya estaba activa; se marco la cola como procesada.',
-				client_code=client_code,
-				subscription_correlative=subscription_correlative,
-				receivable_correlative=row['receivable_correlative'],
-			)
-			db.session.commit()
-			continue
+		was_active = subscription_status == 'activo'
 
 		mac_address = row['installation_mac_address']
 		if not mac_address:
@@ -770,12 +731,19 @@ def process_paid_subscription_reactivations(batch_size: int = 100):
 		)
 
 		db.session.commit()
-		activated += 1
+		if was_active:
+			already_active += 1
+		else:
+			activated += 1
 		log_automation_event(
 			automation_name='paid_subscription_reactivation',
 			action='reactivate_subscription',
 			status='success',
-			message='Suscripcion reactivada automaticamente al pagar la deuda vinculada.',
+			message=(
+				'Cliente habilitado en el router; la suscripcion ya estaba activa en base de datos.'
+				if was_active
+				else 'Suscripcion reactivada automaticamente al pagar la deuda vinculada.'
+			),
 			client_code=client_code,
 			subscription_correlative=subscription_correlative,
 			receivable_correlative=row['receivable_correlative'],
