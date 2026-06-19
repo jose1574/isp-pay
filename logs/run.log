@@ -55,3 +55,21 @@ Press CTRL+C to quit
 127.0.0.1 - - [12/Jun/2026 09:23:09] "GET /installations/get_client?code=15742050 HTTP/1.1" 200 -
 127.0.0.1 - - [12/Jun/2026 09:23:16] "GET /installations/modal_clients HTTP/1.1" 200 -
 127.0.0.1 - - [12/Jun/2026 09:23:18] "GET /installations/modal_clients?page=1&per_page=10&q=15742050 HTTP/1.1" 200 -
+==================================================
+Inicio de ejecucion: vie 19/06/2026 16:10:38,30
+ * Serving Flask app 'flaskr'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.33.24:5000
+Press CTRL+C to quit
+127.0.0.1 - - [19/Jun/2026 16:10:52] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [19/Jun/2026 16:10:52] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [19/Jun/2026 16:10:52] "GET /static/icons/logo.png HTTP/1.1" 304 -
+127.0.0.1 - - [19/Jun/2026 16:10:54] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [19/Jun/2026 16:10:54] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [19/Jun/2026 16:10:54] "GET /static/icons/logo.png HTTP/1.1" 304 -
+127.0.0.1 - - [19/Jun/2026 16:10:54] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [19/Jun/2026 16:10:54] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [19/Jun/2026 16:10:54] "GET /static/icons/logo.png HTTP/1.1" 304 -
