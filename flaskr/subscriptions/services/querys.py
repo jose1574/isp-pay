@@ -585,7 +585,7 @@ def _upsert_subscription_receivable_link(
             (
                 SELECT
                     CASE
-                        WHEN COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0 THEN 'paid_pending_activation'
+                        WHEN COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0.01 THEN 'paid_pending_activation'
                         WHEN COALESCE(r.payment_applied, 0) > 0 THEN 'partial_payment'
                         ELSE 'pending_payment'
                     END
@@ -764,7 +764,7 @@ def get_overdue_active_subscriptions(reference_date=None):
                                 WHEN r.correlative IS NULL THEN COALESCE(l.amount, 0)
                                 ELSE COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0))
                             END
-                        ) > 0
+                        ) > 0.01
                   )
               )
             ORDER BY s.cutoff_day ASC, s.correlative ASC

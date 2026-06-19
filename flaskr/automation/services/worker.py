@@ -430,7 +430,7 @@ def sync_paid_subscription_reactivation_queue():
 			LEFT JOIN genius.subscription_reactivation_queue q
 				ON q.receivable_correlative = l.receivable_correlative
 			WHERE r.operation_type = 'RECEIVABLE'
-			  AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0
+			  AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) <= 0.01
 			  AND COALESCE(r.total, 0) > 0
 			  AND COALESCE(r.payment_applied, 0) > 0
 			  AND NOT EXISTS (
@@ -580,7 +580,7 @@ def process_paid_subscription_reactivations(batch_size: int = 100):
 				FROM genius.subscription_receivable_link l
 				JOIN public.receivable r ON r.correlative = l.receivable_correlative
 				WHERE l.subscription_correlative = :subscription_correlative
-				  AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) > 0
+				  AND COALESCE(r.balance, COALESCE(r.total, 0) - COALESCE(r.payment_applied, 0)) > 0.01
 				"""
 			),
 			{
