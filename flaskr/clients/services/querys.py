@@ -44,6 +44,57 @@ def get_clients_count(search: str | None = None):
     ).scalar_one()
     return total
 
+
+def _clients_without_subscription_where(search: str | None = None):
+    search = (search or '').strip()
+    conditions = [
+        "NOT EXISTS (SELECT 1 FROM genius.subscription s WHERE s.client_code = c.code)"
+    ]
+    params = {}
+
+    if search:
+        conditions.append(
+            "(" 
+            "c.code ILIKE :search "
+            "OR COALESCE(c.description, '') ILIKE :search "
+            "OR COALESCE(c.phone, '') ILIKE :search"
+            ")"
+        )
+        params['search'] = f"%{search}%"
+
+    return " WHERE " + " AND ".join(conditions), params
+
+
+def get_clients_without_subscription(page: int | None = None, per_page: int | None = None, search: str | None = None):
+    where_clause, params = _clients_without_subscription_where(search)
+
+    base_query = f"""
+        SELECT c.*
+        FROM clients c
+        {where_clause}
+        ORDER BY c.code
+    """
+
+    if page is None or per_page is None:
+        return db.session.execute(text(base_query), params).fetchall()
+
+    offset = (page - 1) * per_page
+    params['limit'] = per_page
+    params['offset'] = offset
+    return db.session.execute(
+        text(base_query + " LIMIT :limit OFFSET :offset"),
+        params,
+    ).fetchall()
+
+
+def get_clients_without_subscription_count(search: str | None = None):
+    where_clause, params = _clients_without_subscription_where(search)
+
+    return db.session.execute(
+        text(f"SELECT COUNT(*) FROM clients c{where_clause}"),
+        params,
+    ).scalar_one()
+
 def get_client(code: str ):
     client = db.session.execute(text('SELECT * FROM clients WHERE code= :code'), {"code": code}).first()
     return client

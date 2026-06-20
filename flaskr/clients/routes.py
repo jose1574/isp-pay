@@ -3,28 +3,35 @@ from . import clients_bp
 from .services.querys import (
     get_clients, 
     get_clients_count,
+    get_clients_without_subscription,
+    get_clients_without_subscription_count,
     get_client, 
     get_area_sales, 
     create_client,
     )
 
 
-@clients_bp.route('/')
-def clients():
-    q = (request.args.get('q') or '').strip()
-
+def _parse_pagination_args(default_per_page=10):
     try:
         page = int(request.args.get('page', 1))
     except ValueError:
         page = 1
 
     try:
-        per_page = int(request.args.get('per_page', 10))
+        per_page = int(request.args.get('per_page', default_per_page))
     except ValueError:
-        per_page = 10
+        per_page = default_per_page
 
     page = max(1, page)
     per_page = min(max(5, per_page), 100)
+    return page, per_page
+
+
+@clients_bp.route('/')
+def clients():
+    q = (request.args.get('q') or '').strip()
+
+    page, per_page = _parse_pagination_args()
 
     total_clients = get_clients_count(search=q)
     total_pages = max(1, (total_clients + per_page - 1) // per_page)
@@ -35,6 +42,29 @@ def clients():
     clients = get_clients(page=page, per_page=per_page, search=q)
     return render_template(
         'clients.html',
+        clients=clients,
+        q=q,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        total_clients=total_clients,
+    )
+
+
+@clients_bp.route('/without-subscription')
+def clients_without_subscription():
+    q = (request.args.get('q') or '').strip()
+    page, per_page = _parse_pagination_args()
+
+    total_clients = get_clients_without_subscription_count(search=q)
+    total_pages = max(1, (total_clients + per_page - 1) // per_page)
+
+    if page > total_pages:
+        page = total_pages
+
+    clients = get_clients_without_subscription(page=page, per_page=per_page, search=q)
+    return render_template(
+        'clients_without_subscription.html',
         clients=clients,
         q=q,
         page=page,
@@ -141,18 +171,7 @@ def save_client():
 def modal_clients():
     q = (request.args.get('q') or '').strip()
 
-    try:
-        page = int(request.args.get('page', 1))
-    except ValueError:
-        page = 1
-
-    try:
-        per_page = int(request.args.get('per_page', 10))
-    except ValueError:
-        per_page = 10
-
-    page = max(1, page)
-    per_page = min(max(5, per_page), 100)
+    page, per_page = _parse_pagination_args()
 
     total_clients = get_clients_count(search=q)
     total_pages = max(1, (total_clients + per_page - 1) // per_page)

@@ -11,6 +11,7 @@
 <div class="container mt-3">
 <div id="options" class="d-flex align-items-center gap-3 flex-wrap">
   <a href="{{ url_for('clients.client')}}" class="btn btn-primary">Crear nuevo</a>
+  <a href="{{ url_for('clients.clients_without_subscription') }}" class="btn btn-outline-primary">Sin suscripcion</a>
   <form method="get" action="{{ url_for('clients.clients') }}" class="d-flex align-items-center gap-2">
     <input type="hidden" name="per_page" value="{{ per_page }}">
     <div class="input-group input-group-sm" style="max-width: 360px;">

@@ -31,8 +31,18 @@ def dashboard():
     clients_with_subscription = safe_scalar(
         "SELECT COUNT(DISTINCT client_code) FROM genius.subscription WHERE client_code IS NOT NULL"
     )
+    clients_without_subscription = safe_scalar(
+        """
+        SELECT COUNT(*)
+        FROM clients c
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM genius.subscription s
+            WHERE s.client_code = c.code
+        )
+        """
+    )
     active_ratio = round((active_subscriptions / total_subscriptions) * 100, 1) if total_subscriptions else 0
-    clients_without_subscription = max(total_clients - clients_with_subscription, 0)
 
     status_rows = []
     try:

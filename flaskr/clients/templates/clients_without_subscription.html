@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block title %}Clientes sin suscripcion{% endblock %}
+
+{% block header %}
+  <p class="h1 pb-4 page-title">Clientes sin Suscripcion</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="container mt-3">
+  <div id="options" class="d-flex align-items-center gap-3 flex-wrap justify-content-between">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <a href="{{ url_for('clients.clients') }}" class="btn btn-outline-secondary">Todos los clientes</a>
+      <a href="{{ url_for('clients.client') }}" class="btn btn-primary">Crear nuevo</a>
+    </div>
+
+    <form method="get" action="{{ url_for('clients.clients_without_subscription') }}" class="d-flex align-items-center gap-2">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <div class="input-group input-group-sm" style="max-width: 420px;">
+        <span class="input-group-text" id="inputGroup-sizing-sm">Buscar</span>
+        <input
+          type="text"
+          name="q"
+          class="form-control"
+          placeholder="Buscar en cualquier columna"
+          value="{{ q if q else '' }}"
+          aria-label="Buscar cliente sin suscripcion"
+          aria-describedby="inputGroup-sizing-sm"
+        >
+        <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+      </div>
+      {% if q %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.clients_without_subscription', per_page=per_page) }}">Limpiar</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>Cedula</th>
+          <th>Nombre</th>
+          <th>Telefono</th>
+          <th class="text-end">Accion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+        <tr
+          onclick="window.location='{{ url_for('clients.client', code=client.code) }}';"
+          style="cursor: pointer;"
+          class="align-middle"
+        >
+          <td>{{ client.code }}</td>
+          <td>{{ client.description if client.description else '-' }}</td>
+          <td>{{ client.phone if client.phone else '-' }}</td>
+          <td class="text-end" onclick="event.stopPropagation();">
+            <a class="btn btn-sm btn-success" href="{{ url_for('subscriptions.subscription', code=client.code, mode='new') }}">Asignar suscripcion</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4" class="text-center text-muted">No hay clientes sin suscripcion asignada.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <small class="text-body-secondary">
+      Mostrando {{ clients|length }} de {{ total_clients }} clientes sin suscripcion
+    </small>
+    <small class="text-body-secondary">
+      Pagina {{ page }} de {{ total_pages }}
+    </small>
+  </div>
+
+  <nav aria-label="Paginacion de clientes sin suscripcion" class="mt-2">
+    {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+    {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+    <ul class="pagination mb-0">
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('clients.clients_without_subscription', page=1, per_page=per_page, q=q) }}" aria-label="Primera">Primera</a>
+      </li>
+
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('clients.clients_without_subscription', page=page-1, per_page=per_page, q=q) }}" aria-label="Anterior">Anterior</a>
+      </li>
+
+      {% if start_page > 1 %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+
+      {% for p in range(start_page, end_page + 1) %}
+      <li class="page-item {% if p == page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('clients.clients_without_subscription', page=p, per_page=per_page, q=q) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+
+      {% if end_page < total_pages %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+
+      <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('clients.clients_without_subscription', page=page+1, per_page=per_page, q=q) }}" aria-label="Siguiente">Siguiente</a>
+      </li>
+
+      <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('clients.clients_without_subscription', page=total_pages, per_page=per_page, q=q) }}" aria-label="Ultima">Ultima</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+
+{% endblock %}
