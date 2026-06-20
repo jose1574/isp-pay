@@ -306,25 +306,29 @@ def get_naps(page: int = 1, per_page: int = 10, search: str = ''):
 	return db.session.execute(
 		text(
 			"""
-			SELECT
-				n.correlative,
-				n.description,
-				n.location,
-				n.nodo_id,
-				n.created_at,
-				nd.description AS nodo_description,
-				COUNT(d.correlative) AS port_count
-			FROM genius.nap n
-			LEFT JOIN genius.nodo nd ON nd.correlative = n.nodo_id
-			LEFT JOIN genius.nap_details d ON d.nap_id = n.correlative
+			SELECT *
+			FROM (
+				SELECT
+					n.correlative,
+					n.description,
+					n.location,
+					n.nodo_id,
+					n.created_at,
+					nd.description AS nodo_description,
+					COUNT(d.correlative) AS port_count
+				FROM genius.nap n
+				LEFT JOIN genius.nodo nd ON nd.correlative = n.nodo_id
+				LEFT JOIN genius.nap_details d ON d.nap_id = n.correlative
+				GROUP BY n.correlative, nd.description
+			) nap_list
 			WHERE (
 				:search_value IS NULL
-				OR n.description ILIKE :search_value
-				OR n.location ILIKE :search_value
-				OR nd.description ILIKE :search_value
+				OR nap_list.description ILIKE :search_value
+				OR nap_list.location ILIKE :search_value
+				OR COALESCE(nap_list.nodo_description, '') ILIKE :search_value
+				OR CAST(nap_list.port_count AS TEXT) ILIKE :search_value
 			)
-			GROUP BY n.correlative, nd.description
-			ORDER BY n.correlative DESC
+			ORDER BY nap_list.correlative DESC
 			LIMIT :limit OFFSET :offset
 			"""
 		),
@@ -338,13 +342,24 @@ def get_naps_count(search: str = ''):
 		text(
 			"""
 			SELECT COUNT(*)
-			FROM genius.nap n
-			LEFT JOIN genius.nodo nd ON nd.correlative = n.nodo_id
+			FROM (
+				SELECT
+					n.correlative,
+					n.description,
+					n.location,
+					nd.description AS nodo_description,
+					COUNT(d.correlative) AS port_count
+				FROM genius.nap n
+				LEFT JOIN genius.nodo nd ON nd.correlative = n.nodo_id
+				LEFT JOIN genius.nap_details d ON d.nap_id = n.correlative
+				GROUP BY n.correlative, nd.description
+			) nap_list
 			WHERE (
 				:search_value IS NULL
-				OR n.description ILIKE :search_value
-				OR n.location ILIKE :search_value
-				OR nd.description ILIKE :search_value
+				OR nap_list.description ILIKE :search_value
+				OR nap_list.location ILIKE :search_value
+				OR COALESCE(nap_list.nodo_description, '') ILIKE :search_value
+				OR CAST(nap_list.port_count AS TEXT) ILIKE :search_value
 			)
 			"""
 		),

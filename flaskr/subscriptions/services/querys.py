@@ -41,6 +41,14 @@ def _has_contract_number_column() -> bool:
     return bool(exists)
 
 
+def _subscription_installation_alias_expr(has_no_installation: bool, has_contract_number: bool) -> str:
+    if has_no_installation:
+        return "i.no_installation"
+    if has_contract_number:
+        return "('contrato-' || i.contract_number::text)"
+    return "NULL::VARCHAR"
+
+
 def get_plans(page: int | None = None, per_page: int | None = None, search: str | None = None):
     search = (search or '').strip()
     where_clause = ''
@@ -234,25 +242,24 @@ def get_subscriptions(page: int | None = None, per_page: int | None = None, sear
     search = (search or '').strip()
     where_clause = ''
     params = {}
-
-    if search:
-        where_clause = """
-            WHERE s.client_code ILIKE :search
-               OR s.plan_code ILIKE :search
-               OR s.status ILIKE :search
-               OR CAST(s.installation AS TEXT) ILIKE :search
-        """
-        params['search'] = f"%{search}%"
-
     has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
+    installation_alias_expr = _subscription_installation_alias_expr(has_no_installation, has_contract_number)
 
-    if has_no_installation:
-        installation_alias_expr = "i.no_installation"
-    elif has_contract_number:
-        installation_alias_expr = "('contrato-' || i.contract_number::text)"
-    else:
-        installation_alias_expr = "NULL::VARCHAR"
+    if search:
+        where_clause = f"""
+            WHERE s.client_code ILIKE :search
+               OR COALESCE(c.description, '') ILIKE :search
+               OR s.plan_code ILIKE :search
+               OR COALESCE(p.description, '') ILIKE :search
+               OR s.status ILIKE :search
+               OR CAST(s.installation AS TEXT) ILIKE :search
+               OR COALESCE({installation_alias_expr}, '') ILIKE :search
+               OR CAST(s.cutoff_day AS TEXT) ILIKE :search
+               OR CAST(s.credit_day AS TEXT) ILIKE :search
+               OR CAST(s.price_applied AS TEXT) ILIKE :search
+        """
+        params['search'] = f"%{search}%"
 
     base_query = f"""
         SELECT
@@ -288,18 +295,36 @@ def get_subscriptions_count(search: str | None = None):
     search = (search or '').strip()
     where_clause = ''
     params = {}
+    has_no_installation = _has_no_installation_column()
+    has_contract_number = _has_contract_number_column()
+    installation_alias_expr = _subscription_installation_alias_expr(has_no_installation, has_contract_number)
 
     if search:
-        where_clause = """
-            WHERE client_code ILIKE :search
-               OR plan_code ILIKE :search
-               OR status ILIKE :search
-               OR CAST(installation AS TEXT) ILIKE :search
+        where_clause = f"""
+            WHERE s.client_code ILIKE :search
+               OR COALESCE(c.description, '') ILIKE :search
+               OR s.plan_code ILIKE :search
+               OR COALESCE(p.description, '') ILIKE :search
+               OR s.status ILIKE :search
+               OR CAST(s.installation AS TEXT) ILIKE :search
+               OR COALESCE({installation_alias_expr}, '') ILIKE :search
+               OR CAST(s.cutoff_day AS TEXT) ILIKE :search
+               OR CAST(s.credit_day AS TEXT) ILIKE :search
+               OR CAST(s.price_applied AS TEXT) ILIKE :search
         """
         params['search'] = f"%{search}%"
 
     return db.session.execute(
-        text(f"SELECT COUNT(*) FROM genius.subscription {where_clause}"),
+        text(
+            f"""
+            SELECT COUNT(*)
+            FROM genius.subscription s
+            LEFT JOIN clients c ON c.code = s.client_code
+            LEFT JOIN genius.plans p ON p.code = s.plan_code
+            LEFT JOIN genius.installations i ON i.id = s.installation
+            {where_clause}
+            """
+        ),
         params,
     ).scalar_one()
 
@@ -308,12 +333,7 @@ def get_subscriptions_by_client(client_code: str):
     has_no_installation = _has_no_installation_column()
     has_contract_number = _has_contract_number_column()
 
-    if has_no_installation:
-        installation_alias_expr = "i.no_installation"
-    elif has_contract_number:
-        installation_alias_expr = "('contrato-' || i.contract_number::text)"
-    else:
-        installation_alias_expr = "NULL::VARCHAR"
+    installation_alias_expr = _subscription_installation_alias_expr(has_no_installation, has_contract_number)
 
     return db.session.execute(
         text(

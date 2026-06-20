@@ -93,6 +93,31 @@ def _installation_select_clause() -> str:
     )
 
 
+def _installation_search_clause(has_no_installation: bool, has_contract_number: bool, has_route_id: bool) -> str:
+    conditions = [
+        "i.client_code ILIKE :search",
+        "COALESCE(c.description, '') ILIKE :search",
+        "CAST(i.install_date AS TEXT) ILIKE :search",
+        "COALESCE(i.location, '') ILIKE :search",
+        "COALESCE(i.mac_address, '') ILIKE :search",
+        "COALESCE(i.comment, '') ILIKE :search",
+    ]
+
+    if has_no_installation:
+        conditions.append("COALESCE(i.no_installation, '') ILIKE :search")
+    elif has_contract_number:
+        conditions.append("('contrato-' || i.contract_number::text) ILIKE :search")
+
+    if has_route_id:
+        conditions.extend([
+            "COALESCE(r.identity, '') ILIKE :search",
+            "COALESCE(r.ip_address, '') ILIKE :search",
+            "r.correlative::text ILIKE :search",
+        ])
+
+    return " WHERE " + " OR ".join(conditions)
+
+
 
 
 def get_installations(page: int | None = None, per_page: int | None = None, search: str | None = None):
@@ -104,15 +129,7 @@ def get_installations(page: int | None = None, per_page: int | None = None, sear
     has_route_id = _has_route_id_column()
 
     if search:
-        if has_no_installation:
-            where_clause = " WHERE i.client_code ILIKE :search OR i.location ILIKE :search OR i.mac_address ILIKE :search OR i.comment ILIKE :search OR i.no_installation ILIKE :search"
-        elif has_contract_number:
-            where_clause = " WHERE i.client_code ILIKE :search OR i.location ILIKE :search OR i.mac_address ILIKE :search OR i.comment ILIKE :search OR ('contrato-' || i.contract_number::text) ILIKE :search"
-        else:
-            where_clause = " WHERE i.client_code ILIKE :search OR i.location ILIKE :search OR i.mac_address ILIKE :search OR i.comment ILIKE :search"
-
-        if has_route_id:
-            where_clause += " OR r.identity ILIKE :search OR r.ip_address ILIKE :search OR r.correlative::text ILIKE :search"
+        where_clause = _installation_search_clause(has_no_installation, has_contract_number, has_route_id)
         params['search'] = f"%{search}%"
 
     if has_no_installation:
@@ -151,19 +168,11 @@ def get_installations_count(search: str | None = None):
     has_route_id = _has_route_id_column()
 
     if search:
-        if has_no_installation:
-            where_clause = " WHERE i.client_code ILIKE :search OR i.location ILIKE :search OR i.mac_address ILIKE :search OR i.comment ILIKE :search OR i.no_installation ILIKE :search"
-        elif has_contract_number:
-            where_clause = " WHERE i.client_code ILIKE :search OR i.location ILIKE :search OR i.mac_address ILIKE :search OR i.comment ILIKE :search OR ('contrato-' || i.contract_number::text) ILIKE :search"
-        else:
-            where_clause = " WHERE i.client_code ILIKE :search OR i.location ILIKE :search OR i.mac_address ILIKE :search OR i.comment ILIKE :search"
-
-        if has_route_id:
-            where_clause += " OR r.identity ILIKE :search OR r.ip_address ILIKE :search OR r.correlative::text ILIKE :search"
+        where_clause = _installation_search_clause(has_no_installation, has_contract_number, has_route_id)
         params['search'] = f"%{search}%"
 
     total = db.session.execute(
-        text(f"SELECT COUNT(*) FROM genius.installations i" + (" LEFT JOIN genius.routes r ON r.correlative = i.route_id" if has_route_id else "") + where_clause),
+        text(f"SELECT COUNT(*) {_installation_from_clause()}{where_clause}"),
         params,
     ).scalar_one()
     return total
